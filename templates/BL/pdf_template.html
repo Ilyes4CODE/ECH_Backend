@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bon de Livraison - {{ bon.bl_number }}</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: white;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+        
+        .invoice {
+            background: white;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 30px;
+        }
+        
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #333;
+            padding-bottom: 20px;
+        }
+        
+        .company-info {
+            flex: 1;
+        }
+        
+        .logo {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(45deg, #2c5aa0, #1e3a8a);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 12px;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+        
+        .company-name {
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+            margin: 0;
+        }
+        
+        .company-subtitle {
+            font-size: 14px;
+            color: #666;
+            margin: 5px 0;
+        }
+        
+        .certifications {
+            display: flex;
+            gap: 15px;
+            margin-top: 10px;
+        }
+        
+        .cert-badge {
+            background: #f0f0f0;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 10px;
+            border: 1px solid #ddd;
+        }
+        
+        .invoice-details {
+            text-align: right;
+        }
+        
+        .invoice-number {
+            font-size: 18px;
+            font-weight: bold;
+            color: #2c5aa0;
+            margin-bottom: 10px;
+        }
+        
+        .date {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+        
+        .user-info {
+            font-size: 12px;
+            color: #888;
+            margin-top: 10px;
+        }
+        
+        .client-section {
+            margin: 30px 0;
+        }
+        
+        .client-info {
+            background: #f8f9fa;
+            padding: 15px;
+            border-left: 4px solid #2c5aa0;
+        }
+        
+        .project-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        
+        .document-title {
+            text-align: center;
+            font-size: 20px;
+            font-weight: bold;
+            text-decoration: underline;
+            margin: 30px 0;
+            color: #333;
+        }
+        
+        .delivery-info {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f9f9f9;
+            border: 1px solid #ddd;
+        }
+        
+        .delivery-row {
+            display: flex;
+            margin-bottom: 10px;
+        }
+        
+        .delivery-label {
+            font-weight: bold;
+            width: 150px;
+            min-width: 150px;
+        }
+        
+        .delivery-value {
+            flex: 1;
+        }
+        
+        .items-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 30px 0;
+            border: 2px solid #333;
+        }
+        
+        .items-table th {
+            background: #f8f9fa;
+            padding: 12px 8px;
+            text-align: center;
+            font-weight: bold;
+            border: 1px solid #333;
+            font-size: 11px;
+        }
+        
+        .items-table td {
+            padding: 10px 8px;
+            border: 1px solid #333;
+            font-size: 11px;
+        }
+        
+        .items-table .item-no {
+            text-align: center;
+            width: 40px;
+            background: #f8f9fa;
+        }
+        
+        .items-table .description {
+            text-align: left;
+            min-width: 200px;
+        }
+        
+        .items-table .unit, .items-table .quantity, 
+        .items-table .unit-price, .items-table .total-price {
+            text-align: center;
+            width: 80px;
+        }
+        
+        .charges-section {
+            margin: 20px 0;
+        }
+        
+        .charges-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+        }
+        
+        .charges-table th {
+            background: #f5f5f5;
+            padding: 8px;
+            text-align: left;
+            font-weight: bold;
+            border: 1px solid #ddd;
+        }
+        
+        .charges-table td {
+            padding: 8px;
+            border: 1px solid #ddd;
+        }
+        
+        .total-section {
+            margin: 30px 0;
+            text-align: right;
+        }
+        
+        .total-amount {
+            font-size: 16px;
+            font-weight: bold;
+            color: #2c5aa0;
+            padding: 10px;
+            border: 2px solid #2c5aa0;
+            display: inline-block;
+            margin-top: 10px;
+        }
+        
+        .signature-section {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 50px;
+        }
+        
+        .signature-box {
+            width: 200px;
+            text-align: center;
+        }
+        
+        .signature-title {
+            font-weight: bold;
+            margin-bottom: 60px;
+            color: #333;
+        }
+        
+        .signature-line {
+            border-bottom: 1px solid #333;
+            margin-top: 50px;
+        }
+        
+        .company-footer {
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 1px solid #ddd;
+            font-size: 9px;
+            color: #666;
+            text-align: center;
+            line-height: 1.4;
+        }
+        
+        .footer-section {
+            margin: 5px 0;
+        }
+        
+        .generation-info {
+            margin-top: 20px;
+            padding: 10px;
+            background: #f0f8ff;
+            border: 1px solid #cce7ff;
+            font-size: 10px;
+            color: #555;
+        }
+        
+        @media print {
+            body {
+                background: white;
+                padding: 0;
+            }
+            
+            .invoice {
+                box-shadow: none;
+                max-width: none;
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="invoice">
+        <div class="header">
+            <div class="company-info">
+                <div class="logo">EURL<br>ECH SAHRA</div>
+                <h1 class="company-name">EURL E.C.H SAHRA</h1>
+                <p class="company-subtitle">Entreprise de Travaux de Construction Hydraulique et Génie Civil</p>
+                <div class="certifications">
+                    <span class="cert-badge">ISO 9001</span>
+                    <span class="cert-badge">QUALIC</span>
+                </div>
+            </div>
+            <div class="invoice-details">
+                <div class="invoice-number">BON DE LIVRAISON N° {{ bon.bl_number }}</div>
+                <div class="date">Ouargla le {{ bon.created_at|date:"d/m/Y" }}</div>
+                {% if created_by %}
+                <div class="user-info">
+                    <strong>Créé par:</strong> {{ created_by.get_full_name|default:created_by.username }}
+                </div>
+                {% endif %}
+                {% if pdf_generated_by %}
+                <div class="user-info">
+                    <strong>PDF généré par:</strong> {{ pdf_generated_by.get_full_name|default:pdf_generated_by.username }}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="client-section">
+            <div class="client-info">
+                <div><strong>Projet:</strong> {{ project.name }}</div>
+                <div class="project-title">{{ project.description }}</div>
+            </div>
+        </div>
+        
+        <div class="delivery-info">
+            <div class="delivery-row">
+                <div class="delivery-label">Origine:</div>
+                <div class="delivery-value">{{ bon.origin_address }}</div>
+            </div>
+            <div class="delivery-row">
+                <div class="delivery-label">Destination:</div>
+                <div class="delivery-value">{{ bon.destination_address }}</div>
+            </div>
+            {% if bon.description %}
+            <div class="delivery-row">
+                <div class="delivery-label">Description:</div>
+                <div class="delivery-value">{{ bon.description }}</div>
+            </div>
+            {% endif %}
+            <div class="delivery-row">
+                <div class="delivery-label">Mode de paiement:</div>
+                <div class="delivery-value">{{ bon.get_payment_method_display }}</div>
+            </div>
+        </div>
+        
+        <div class="document-title">BON DE LIVRAISON</div>
+        
+        <table class="items-table">
+            <thead>
+                <tr>
+                    <th>N°</th>
+                    <th>Description</th>
+                    <th>Unité</th>
+                    <th>Quantité</th>
+                    {% if items.0.unit_price %}
+                    <th>Prix Unitaire (DA)</th>
+                    <th>Total (DA)</th>
+                    {% endif %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                <tr>
+                    <td class="item-no">{{ forloop.counter|stringformat:"02d" }}</td>
+                    <td class="description">{{ item.product.name }}</td>
+                    <td class="unit">U</td>
+                    <td class="quantity">{{ item.quantity }}</td>
+                    {% if item.unit_price %}
+                    <td class="unit-price">{{ item.unit_price|floatformat:2 }}</td>
+                    <td class="total-price">{{ item.total_price|floatformat:2 }}</td>
+                    {% endif %}
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" style="text-align: center; color: #999;">Aucun article</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        
+        {% if charges %}
+        <div class="charges-section">
+            <h3>Frais Supplémentaires</h3>
+            <table class="charges-table">
+                <thead>
+                    <tr>
+                        <th>Description</th>
+                        <th style="width: 150px; text-align: right;">Montant (DA)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for charge in charges %}
+                    <tr>
+                        <td>{{ charge.description }}</td>
+                        <td style="text-align: right;">{{ charge.amount|floatformat:2 }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+        
+        {% if bon.total_amount > 0 %}
+        <div class="total-section">
+            <div class="total-amount">
+                MONTANT TOTAL: {{ bon.total_amount|floatformat:2 }} DA
+            </div>
+        </div>
+        {% endif %}
+        
+        <div class="signature-section">
+            <div class="signature-box">
+                <div class="signature-title">Le Commercial</div>
+                <div class="signature-line"></div>
+            </div>
+            <div class="signature-box">
+                <div class="signature-title">Client</div>
+                <div class="signature-line"></div>
+            </div>
+        </div>
+        
+        <div class="generation-info">
+            <div><strong>Document généré le:</strong> {{ generation_date|date:"d/m/Y à H:i" }}</div>
+            {% if pdf_generated_by %}
+            <div><strong>Généré par:</strong> {{ pdf_generated_by.get_full_name|default:pdf_generated_by.username }}</div>
+            {% endif %}
+            {% if created_by %}
+            <div><strong>Bon de livraison créé par:</strong> {{ created_by.get_full_name|default:created_by.username }}</div>
+            {% endif %}
+        </div>
+        
+        <div class="company-footer">
+            <div class="footer-section">
+                <strong>Entreprise au Capital Social :</strong> 26.000.000,00 DA / <strong>RC :</strong> 30/ 00-0126507 B 22, <strong>NIF :</strong> 002230012650738, <strong>Art :</strong> 30010149062 <strong>RIB :</strong> AGB 032 003002875121208 86
+            </div>
+            <div class="footer-section">
+                <strong>Adresse :</strong> Local 100 Bt 06 Q, Cité Ennasr, Nouvelle Bamendile Ouargla, <strong>Tél/Fax :</strong> 029 60 93 13. <strong>Email :</strong> echsahra@gmail.com
+            </div>
+        </div>
+    </div>
+</body>
+</html>
