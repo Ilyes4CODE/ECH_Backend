@@ -16,7 +16,8 @@ from datetime import datetime
 import weasyprint
 from weasyprint import HTML, CSS
 from weasyprint.text.fonts import FontConfiguration
-
+from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.decorators import api_view, permission_classes, parser_classes
 # Global Caisse Views
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -130,29 +131,58 @@ def project_detail(request, pk):
 
 @api_view(['PUT'])
 @permission_classes([IsAuthenticated])
+@parser_classes([MultiPartParser, FormParser])  # Add this line
 def project_update(request, pk):
-    """Update project details"""
-    project = get_object_or_404(Project, pk=pk)
+    """Update project details - only update provided fields"""
+    try:
+        project = get_object_or_404(Project, pk=pk)
+        updated_fields = []
+        
+        # Now request.data will work properly with FormData
+        if 'name' in request.data and request.data.get('name'):
+            project.name = request.data.get('name')
+            updated_fields.append('name')
+        
+        if 'description' in request.data:
+            project.description = request.data.get('description')
+            updated_fields.append('description')
+        
+        if request.FILES.get('contract_file'):
+            project.contract_file = request.FILES.get('contract_file')
+            updated_fields.append('contract_file')
+        
+        if 'estimated_cost' in request.data and request.data.get('estimated_cost'):
+            try:
+                project.estimated_cost = float(request.data.get('estimated_cost'))
+                updated_fields.append('estimated_cost')
+            except (ValueError, TypeError):
+                return Response({'error': 'Invalid estimated_cost value'}, status=400)
+        
+        if 'duration_days' in request.data and request.data.get('duration_days'):
+            try:
+                project.duration_days = int(request.data.get('duration_days'))
+                updated_fields.append('duration_days')
+            except (ValueError, TypeError):
+                return Response({'error': 'Invalid duration_days value'}, status=400)
+        
+        if updated_fields:
+            project.save(update_fields=updated_fields + ['updated_at'])
+        
+        return Response({
+            'id': project.id,
+            'name': project.name,
+            'description': project.description,
+            'contract_file': project.contract_file.url if project.contract_file else None,
+            'estimated_cost': project.estimated_cost,
+            'duration_days': project.duration_days,
+            'actual_spent': project.actual_spent,
+            'updated_at': project.updated_at
+        })
+        
+    except Exception as e:
+        print(f"Error in project_update: {str(e)}")
+        return Response({'error': str(e)}, status=500)
     
-    project.name = request.data.get('name', project.name)
-    project.description = request.data.get('description', project.description)
-    if request.FILES.get('contract_file'):
-        project.contract_file = request.FILES.get('contract_file')
-    project.estimated_cost = request.data.get('estimated_cost', project.estimated_cost)
-    project.duration_days = request.data.get('duration_days', project.duration_days)
-    project.save()
-    
-    return Response({
-        'id': project.id,
-        'name': project.name,
-        'description': project.description,
-        'contract_file': project.contract_file.url if project.contract_file else None,
-        'estimated_cost': project.estimated_cost,
-        'duration_days': project.duration_days,
-        'actual_spent': project.actual_spent,
-        'updated_at': project.updated_at
-    })
-
 @api_view(['DELETE'])
 @permission_classes([IsAuthenticated])
 def project_delete(request, pk):
@@ -227,6 +257,7 @@ def product_create(request):
 def bon_de_livraison_list(request):
     """Get list of all bon de livraison with optional project filter"""
     project_id = request.GET.get('project_id')
+    print(f"Project ID filter: {project_id}")
     if project_id:
         bons = BonDeLivraison.objects.filter(project_id=project_id).select_related('created_by', 'pdf_generated_by', 'project')
     else:
@@ -283,76 +314,87 @@ def bon_de_livraison_list(request):
         })
     return Response(data)
 
+from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.decorators import api_view, permission_classes, parser_classes
+import json
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-def bon_de_livraison_create(request):
+@parser_classes([MultiPartParser, FormParser])  # Add this line
+def bon_de_livraison_create(request,pk):
     """Create a new bon de livraison"""
-    bon = BonDeLivraison.objects.create(
-        project_id=request.data.get('project_id'),
-        origin_address=request.data.get('origin_address'),
-        destination_address=request.data.get('destination_address'),
-        description=request.data.get('description', ''),
-        payment_method=request.data.get('payment_method'),
-        payment_proof=request.FILES.get('payment_proof'),
-        created_by=request.user
-    )
-     
-    items_data = request.data.get('items', [])
-    if isinstance(items_data, str):
-        items_data = json.loads(items_data)
-    
-    for item_data in items_data:
-        BonDeLivraisonItem.objects.create(
-            bon_de_livraison=bon,
-            product_id=item_data.get('product_id'),
-            quantity=item_data.get('quantity'),
-            unit_price=item_data.get('unit_price'),
-            total_price=item_data.get('total_price')
+    project_id = Project.objects.filter(id=pk).first()
+    try:
+        bon = BonDeLivraison.objects.create(
+            project_id=project_id.pk,
+            origin_address=request.data.get('origin_address'),
+            destination_address=request.data.get('destination_address'),
+            description=request.data.get('description', ''),
+            payment_method=request.data.get('payment_method'),
+            payment_proof=request.FILES.get('payment_proof'),
+            created_by=request.user
         )
-    
-    charges_data = request.data.get('additional_charges', [])
-    if isinstance(charges_data, str):
-        charges_data = json.loads(charges_data)
-    
-    for charge_data in charges_data:
-        AdditionalCharge.objects.create(
+         
+        items_data = request.data.get('items', [])
+        if isinstance(items_data, str):
+            items_data = json.loads(items_data)
+        
+        for item_data in items_data:
+            BonDeLivraisonItem.objects.create(
+                bon_de_livraison=bon,
+                product_id=item_data.get('product_id'),
+                quantity=item_data.get('quantity'),
+                unit_price=item_data.get('unit_price'),
+                total_price=item_data.get('total_price')
+            )
+        
+        charges_data = request.data.get('additional_charges', [])
+        if isinstance(charges_data, str):
+            charges_data = json.loads(charges_data)
+        
+        for charge_data in charges_data:
+            AdditionalCharge.objects.create(
+                bon_de_livraison=bon,
+                description=charge_data.get('description'),
+                amount=charge_data.get('amount')
+            )
+        
+        # Update total amount
+        bon.total_amount = bon.calculate_total()
+        bon.save()
+        
+        # Update project actual spent
+        project = bon.project
+        project.actual_spent += bon.total_amount
+        project.save()
+        
+        # Update global caisse
+        caisse = GlobalCaisse.objects.first()
+        if caisse:
+            caisse.total_amount -= bon.total_amount
+            caisse.save()
+        
+        # Create history entry
+        BonLivraisonHistory.objects.create(
+            project=bon.project,
             bon_de_livraison=bon,
-            description=charge_data.get('description'),
-            amount=charge_data.get('amount')
+            bl_number=bon.bl_number,
+            action='created',
+            user=request.user,
+            description=f"Bon de Livraison created with {bon.items.count()} items"
         )
-    
-    # Update total amount
-    bon.total_amount = bon.calculate_total()
-    bon.save()
-    
-    # Update project actual spent
-    project = bon.project
-    project.actual_spent += bon.total_amount
-    project.save()
-    
-    # Update global caisse
-    caisse = GlobalCaisse.objects.first()
-    if caisse:
-        caisse.total_amount -= bon.total_amount
-        caisse.save()
-    
-    # Create history entry
-    BonLivraisonHistory.objects.create(
-        project=bon.project,
-        bon_de_livraison=bon,
-        bl_number=bon.bl_number,
-        action='created',
-        user=request.user,
-        description=f"Bon de Livraison created with {bon.items.count()} items"
-    )
-    
-    return Response({
-        'id': bon.id,
-        'bl_number': bon.bl_number,
-        'project_id': bon.project.id,
-        'total_amount': bon.total_amount,
-        'created_at': bon.created_at
-    }, status=status.HTTP_201_CREATED)
+        
+        return Response({
+            'id': bon.id,
+            'bl_number': bon.bl_number,
+            'project_id': bon.project.id,
+            'total_amount': bon.total_amount,
+            'created_at': bon.created_at
+        }, status=status.HTTP_201_CREATED)
+        
+    except Exception as e:
+        print(f"Error in bon_de_livraison_create: {str(e)}")
+        return Response({'error': str(e)}, status=500)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -442,7 +484,6 @@ def bon_de_livraison_delete(request, pk):
 
 # PDF Generation Views
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
 def generate_bl_pdf(request, pk):
     """Generate PDF for Bon de Livraison"""
     bon = get_object_or_404(BonDeLivraison, pk=pk)
@@ -460,7 +501,7 @@ def generate_bl_pdf(request, pk):
         }
         
         # Render HTML template
-        html_string = render_to_string('bon_livraison_pdf.html', context)
+        html_string = render_to_string('BL\pdf_template.html', context)
         
         # Generate PDF
         font_config = FontConfiguration()

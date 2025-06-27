@@ -20,7 +20,7 @@ urlpatterns = [
     
     # Bon de Livraison URLs
     path('api/bon-de-livraison/', views.bon_de_livraison_list, name='bon_de_livraison_list'),
-    path('api/bon-de-livraison/create/', views.bon_de_livraison_create, name='bon_de_livraison_create'),
+    path('api/bon-de-livraison/create/<int:pk>/', views.bon_de_livraison_create, name='bon_de_livraison_create'),
     path('api/bon-de-livraison/<int:pk>/', views.bon_de_livraison_detail, name='bon_de_livraison_detail'),
     path('api/bon-de-livraison/<int:pk>/delete/', views.bon_de_livraison_delete, name='bon_de_livraison_delete'),
     
