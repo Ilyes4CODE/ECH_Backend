@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ report_title }}</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 1cm;
+            @top-center {
+                content: "EURL E.C.H SAHRA - {{ report_title }}";
+                font-size: 9px;
+                color: #666;
+            }
+            @bottom-center {
+                content: "Page " counter(page) " sur " counter(pages);
+                font-size: 9px;
+                color: #666;
+            }
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 11px;
+            line-height: 1.3;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            max-width: 100%;
+            box-sizing: border-box;
+        }
+        
+        .page-content {
+            width: 100%;
+            max-width: 100%;
+            box-sizing: border-box;
+        }
+        
+        .main-content {
+            width: 100%;
+        }
+        
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #000;
+            padding-bottom: 10px;
+            width: 100%;
+        }
+        
+        .logo-left, .logo-right {
+            width: 70px;
+            height: 70px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #f9f9f9;
+            flex-shrink: 0;
+        }
+        
+        .company-info {
+            text-align: center;
+            flex-grow: 1;
+            margin: 0 15px;
+            max-width: calc(100% - 170px);
+        }
+        
+        .company-info h1 {
+            font-size: 18px;
+            font-weight: bold;
+            margin: 0 0 5px 0;
+            color: #000;
+        }
+        
+        .company-info h2 {
+            font-size: 12px;
+            margin: 0 0 10px 0;
+            color: #666;
+            font-weight: normal;
+        }
+        
+        .document-info {
+            text-align: center;
+            margin: 15px 0;
+        }
+        
+        .document-title {
+            font-size: 16px;
+            font-weight: bold;
+            text-decoration: underline;
+            margin-bottom: 5px;
+        }
+        
+        .document-number {
+            font-size: 14px;
+            font-weight: bold;
+        }
+        
+        .period-info {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 10px;
+            margin-bottom: 15px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        
+        .period-info h3 {
+            color: #495057;
+            margin: 0 0 8px 0;
+            font-size: 14px;
+        }
+        
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-bottom: 15px;
+            width: 100%;
+        }
+        
+        .summary-card {
+            background-color: #ffffff;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 12px;
+            text-align: center;
+        }
+        
+        .summary-card h4 {
+            margin: 0 0 5px 0;
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .summary-card .amount {
+            font-size: 16px;
+            font-weight: bold;
+            margin: 0;
+        }
+        
+        .encaissements .amount { color: #28a745; }
+        .decaissements .amount { color: #dc3545; }
+        .solde .amount { color: #007bff; }
+        .operations .amount { color: #6f42c1; }
+        
+        .operations-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 15px;
+            font-size: 9px;
+            page-break-inside: auto;
+        }
+        
+        .operations-table th,
+        .operations-table td {
+            border: 1px solid #dee2e6;
+            padding: 4px;
+            text-align: left;
+            page-break-inside: avoid;
+            word-wrap: break-word;
+        }
+        
+        .operations-table th {
+            background-color: #e9ecef;
+            font-weight: bold;
+            color: #495057;
+        }
+        
+        .operations-table thead {
+            display: table-header-group;
+        }
+        
+        .operations-table tbody tr {
+            page-break-inside: avoid;
+        }
+        
+        .operations-table tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+        
+        .amount-positive {
+            color: #28a745;
+            font-weight: bold;
+        }
+        
+        .amount-negative {
+            color: #dc3545;
+            font-weight: bold;
+        }
+        
+        .operation-type {
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 9px;
+            font-weight: bold;
+        }
+        
+        .type-encaissement {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        
+        .type-decaissement {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        
+        .proof-link {
+            color: #007bff;
+            text-decoration: none;
+            font-size: 9px;
+            padding: 2px 4px;
+            border: 1px solid #007bff;
+            border-radius: 3px;
+            display: inline-block;
+        }
+        
+        .proof-link:hover {
+            background-color: #007bff;
+            color: white;
+        }
+        
+        .footer {
+            margin-top: auto;
+            padding-top: 15px;
+            border-top: 1px solid #dee2e6;
+            font-size: 9px;
+            color: #666;
+            position: relative;
+            bottom: 0;
+        }
+        
+        .footer-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+        
+        .footer-info {
+            flex-grow: 1;
+        }
+        
+        .footer-info p {
+            margin: 2px 0;
+            line-height: 1.2;
+        }
+        
+        .qr-code {
+            width: 60px;
+            height: 60px;
+            border: 1px solid #ddd;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #f9f9f9;
+            margin-left: 15px;
+        }
+        
+        .section-title {
+            background-color: #495057;
+            color: white;
+            padding: 8px;
+            margin: 20px 0 10px 0;
+            font-size: 13px;
+            font-weight: bold;
+        }
+        
+        .no-operations {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+            font-style: italic;
+        }
+        
+        .generation-info {
+            text-align: right;
+            margin-bottom: 10px;
+            font-size: 10px;
+            color: #666;
+        }
+        
+        .page-break {
+            page-break-before: always;
+        }
+        
+        @media print {
+            .footer {
+                position: fixed;
+                bottom: 0;
+                width: 100%;
+            }
+            
+            .page-content {
+                margin-bottom: 100px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="page-content">
+        <div class="main-content">
+            <div class="header">
+                <div class="logo-left">
+                    <span style="font-size: 10px; color: #999;">LOGO</span>
+                </div>
+                <div class="company-info">
+                    <h1>EURL E.C.H SAHRA</h1>
+                    <h2>Entreprise de Travaux de Construction Hydraulique et Génie Civil</h2>
+                    <div class="document-info">
+                        <div class="document-title">{{ report_title }}</div>
+                        <div class="document-number">N° : {{ generation_date|date:"Y" }}/{{ generation_date|date:"m" }}/{{ generation_date|date:"d" }}-{{ generation_date|date:"His" }}</div>
+                    </div>
+                </div>
+                <div class="logo-right">
+                    <span style="font-size: 10px; color: #999;">LOGO</span>
+                </div>
+            </div>
+            
+            <div class="generation-info">
+                <p><strong>Ouargla le {{ generation_date|date:"d/m/Y" }}</strong></p>
+                <p><strong>Généré par:</strong> {{ generated_by.username }} - {{ generation_date|date:"d/m/Y à H:i" }}</p>
+            </div>
+            
+            <div class="period-info">
+                <h3>Résumé de la période : {{ period_display }}</h3>
+                <div class="summary-grid">
+                    <div class="summary-card encaissements">
+                        <h4>Total Encaissements</h4>
+                        <p class="amount">+{{ total_encaissements|floatformat:2 }} DZD</p>
+                    </div>
+                    <div class="summary-card decaissements">
+                        <h4>Total Décaissements</h4>
+                        <p class="amount">-{{ total_decaissements|floatformat:2 }} DZD</p>
+                    </div>
+                    <div class="summary-card solde">
+                        <h4>Solde Net</h4>
+                        <p class="amount">{{ solde_net|floatformat:2 }} DZD</p>
+                    </div>
+                    <div class="summary-card operations">
+                        <h4>Nombre d'Opérations</h4>
+                        <p class="amount">{{ total_operations }}</p>
+                    </div>
+                </div>
+            </div>
+            
+            {% if operations %}
+                <div class="section-title">Détail des Opérations</div>
+                <table class="operations-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Type</th>
+                            <th>Description</th>
+                            <th>Montant</th>
+                            <th>Solde Après</th>
+                            <th>Utilisateur</th>
+                            <th>Projet</th>
+                            <th>Preuve</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for operation in operations %}
+                        <tr>
+                            <td>{{ operation.created_at|date:"d/m/Y H:i" }}</td>
+                            <td>
+                                <span class="operation-type type-{{ operation.operation_type }}">
+                                    {% if operation.operation_type == 'encaissement' %}
+                                        ENC
+                                    {% elif operation.operation_type == 'decaissement' %}
+                                        DEC
+                                    {% else %}
+                                        {{ operation.operation_type|title }}
+                                    {% endif %}
+                                </span>
+                            </td>
+                            <td>{{ operation.description|default:"-" }}</td>
+                            <td class="{% if operation.operation_type == 'encaissement' %}amount-positive{% else %}amount-negative{% endif %}">
+                                {% if operation.operation_type == 'encaissement' %}+{% else %}-{% endif %}{{ operation.amount|floatformat:2 }} DZD
+                            </td>
+                            <td>{{ operation.balance_after|floatformat:2 }} DZD</td>
+                            <td>
+                                {% if operation.user %}
+                                    {{ operation.user.username }}
+                                    {% if operation.user.first_name or operation.user.last_name %}
+                                        <br><small>({{ operation.user.first_name }} {{ operation.user.last_name }})</small>
+                                    {% endif %}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td>{{ project.name|default:"-" }}</td>
+                            <td>
+                                {% if operation.preuve_file %}
+                                    <span class="proof-link">Voir</span>
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <div class="no-operations">
+                    <p>Aucune opération trouvée pour la période sélectionnée.</p>
+                </div>
+            {% endif %}
+        </div>
+        
+        <div class="footer">
+            <div class="footer-content">
+                <div class="footer-info">
+                    <p><strong>Entreprise au Capital Social de :</strong> 26.000.000.00 DA / RC : 30/ 00-0126507 B 22, NIF : 002230012650738, Art : 30010149062 RIB : AGB 032 003002875121208 86</p>
+                    <p><strong>Adresse :</strong> Local 100 Bt 06 Q, Cité Ennasr, Nouvelle Bamendile Ouargla, Tél/Fax : 029 60 93 13. Email : echsahra@gmail.com</p>
+                    <p>Rapport généré le {{ generation_date|date:"d/m/Y à H:i" }} par {{ generated_by.username }} - EURL E.C.H SAHRA - Système de Gestion ERP</p>
+                </div>
+                <div class="qr-code">
+                    <img src="data:image/png;base64,{{ qr_code_base64 }}" alt="QR Code" style="width: 100%; height: 100%; object-fit: contain;">
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

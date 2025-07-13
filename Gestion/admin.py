@@ -6,7 +6,13 @@ from .models import (
     BonDeLivraison,
     BonDeLivraisonItem,
     AdditionalCharge,
-    BonLivraisonHistory
+    BonLivraisonHistory,
+    CaisseOperation,
+    OrdreDeMission,
+    ProjectCaisseOperation,
+    BonDeCommande,
+    BonDeCommandeItem,
+    
 )
 
 # Simple default registrations
@@ -17,3 +23,8 @@ admin.site.register(BonDeLivraison)
 admin.site.register(BonDeLivraisonItem)
 admin.site.register(AdditionalCharge)
 admin.site.register(BonLivraisonHistory)
+admin.site.register(CaisseOperation)
+admin.site.register(OrdreDeMission)
+admin.site.register(ProjectCaisseOperation)
+admin.site.register(BonDeCommande)
+admin.site.register(BonDeCommandeItem)
