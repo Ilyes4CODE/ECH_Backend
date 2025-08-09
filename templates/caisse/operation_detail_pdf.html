@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ report_title }}</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 0.8cm;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 10px;
+            line-height: 1.3;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            background-color: #fff;
+        }
+        
+        .container {
+            width: 100%;
+            max-width: 100%;
+            min-height: calc(100vh - 1.6cm);
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            padding-bottom: 80px;
+        }
+        
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #000;
+            padding-bottom: 10px;
+        }
+        
+        .logo-left, .logo-right {
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            flex-shrink: 0;
+        }
+        
+        .company-info {
+            text-align: center;
+            flex-grow: 1;
+            margin: 0 10px;
+        }
+        
+        .company-info h1 {
+            font-size: 16px;
+            font-weight: bold;
+            margin: 0 0 3px 0;
+            color: #000;
+        }
+        
+        .company-info h2 {
+            font-size: 10px;
+            margin: 0 0 8px 0;
+            color: #666;
+            font-weight: normal;
+        }
+        
+        .document-info {
+            text-align: center;
+            margin: 8px 0;
+        }
+        
+        .document-title {
+            font-size: 14px;
+            font-weight: bold;
+            text-decoration: underline;
+            margin-bottom: 3px;
+            color: #007bff;
+        }
+        
+        .document-number {
+            font-size: 12px;
+            font-weight: bold;
+            color: #495057;
+        }
+        
+        .generation-info {
+            text-align: right;
+            margin-bottom: 15px;
+            font-size: 9px;
+            color: #666;
+            background-color: #f8f9fa;
+            padding: 8px;
+            border-radius: 5px;
+        }
+        
+        .main-content {
+            flex-grow: 1;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 15px;
+            align-items: start;
+        }
+        
+        .left-column, .right-column {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        
+        .operation-summary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+            grid-column: 1 / -1;
+            margin-bottom: 5px;
+        }
+        
+        .operation-summary h3 {
+            margin: 0 0 10px 0;
+            font-size: 16px;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+        }
+        
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+        
+        .summary-card {
+            background-color: rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            padding: 10px;
+            text-align: center;
+            backdrop-filter: blur(10px);
+        }
+        
+        .summary-card h4 {
+            margin: 0 0 5px 0;
+            font-size: 10px;
+            opacity: 0.9;
+        }
+        
+        .summary-card .amount {
+            font-size: 14px;
+            font-weight: bold;
+            margin: 0;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+        }
+        
+        .section {
+            background-color: #ffffff;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            overflow: hidden;
+            height: fit-content;
+        }
+        
+        .section-header {
+            background-color: #495057;
+            color: white;
+            padding: 8px 12px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+        
+        .section-content {
+            padding: 12px;
+        }
+        
+        .detail-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 8px;
+        }
+        
+        .detail-item {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+        
+        .detail-label {
+            font-weight: bold;
+            color: #495057;
+            font-size: 9px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+        
+        .detail-value {
+            color: #333;
+            font-size: 10px;
+            padding: 6px 8px;
+            background-color: #f8f9fa;
+            border-radius: 3px;
+            border-left: 3px solid #007bff;
+            word-wrap: break-word;
+        }
+        
+        .detail-value.amount-positive {
+            background-color: #d4edda;
+            border-left-color: #28a745;
+            color: #155724;
+            font-weight: bold;
+        }
+        
+        .detail-value.amount-negative {
+            background-color: #f8d7da;
+            border-left-color: #dc3545;
+            color: #721c24;
+            font-weight: bold;
+        }
+        
+        .detail-value.empty {
+            color: #999;
+            font-style: italic;
+        }
+        
+        .badges-container {
+            margin-top: 10px;
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
+        }
+        
+        .badge {
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 8px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+        
+        .badge-collaborator {
+            background-color: #ffc107;
+            color: #856404;
+        }
+        
+        .badge-dette {
+            background-color: #dc3545;
+            color: white;
+        }
+        
+        .badge-mode {
+            background-color: #17a2b8;
+            color: white;
+        }
+        
+        .badge-source {
+            background-color: #6f42c1;
+            color: white;
+        }
+        
+        .timeline-item {
+            display: flex;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid #f1f1f1;
+        }
+        
+        .timeline-item:last-child {
+            border-bottom: none;
+        }
+        
+        .timeline-icon {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 10px;
+            font-weight: bold;
+            color: white;
+            font-size: 10px;
+            flex-shrink: 0;
+        }
+        
+        .timeline-icon.created {
+            background-color: #007bff;
+        }
+        
+        .timeline-icon.operation {
+            background-color: #28a745;
+        }
+        
+        .timeline-content h4 {
+            margin: 0 0 3px 0;
+            font-size: 11px;
+            color: #495057;
+        }
+        
+        .timeline-content p {
+            margin: 0;
+            font-size: 9px;
+            color: #666;
+        }
+        
+        .proof-section {
+            text-align: center;
+            padding: 12px;
+            background-color: #f8f9fa;
+            border-radius: 6px;
+        }
+        
+        .proof-link {
+            display: inline-block;
+            background-color: #007bff;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 4px;
+            text-decoration: none;
+            font-weight: bold;
+            font-size: 10px;
+        }
+        
+        .no-proof {
+            color: #999;
+            font-style: italic;
+            font-size: 10px;
+        }
+        
+        .footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 10px 0.8cm;
+            border-top: 2px solid #495057;
+            font-size: 8px;
+            color: #666;
+            background-color: white;
+            z-index: 1000;
+        }
+        
+        .footer-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 10px;
+        }
+        
+        .footer-info {
+            flex-grow: 1;
+        }
+        
+        .footer-info p {
+            margin: 1px 0;
+            line-height: 1.2;
+        }
+        
+        .qr-code {
+            width: 50px;
+            height: 50px;
+            border: 1px solid #ddd;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #f9f9f9;
+            border-radius: 4px;
+            flex-shrink: 0;
+        }
+        
+        .qr-code img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+        
+        .full-width {
+            grid-column: 1 / -1;
+        }
+        
+        @media print {
+            body {
+                font-size: 9px;
+            }
+            
+            .container {
+                min-height: auto;
+            }
+            
+            .main-content {
+                gap: 10px;
+            }
+            
+            .section {
+                break-inside: avoid;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo-left">
+                <span style="font-size: 9px; color: #999;">LOGO</span>
+            </div>
+            <div class="company-info">
+                <h1>EURL E.C.H SAHRA</h1>
+                <h2>Entreprise de Travaux de Construction Hydraulique et Génie Civil</h2>
+                <div class="document-info">
+                    <div class="document-title">{{ report_title }}</div>
+                    <div class="document-number">N° : {{ generation_date|date:"Y" }}/{{ generation_date|date:"m" }}/{{ generation_date|date:"d" }}-{{ generation_date|date:"His" }}</div>
+                </div>
+            </div>
+            <div class="logo-right">
+                <span style="font-size: 9px; color: #999;">LOGO</span>
+            </div>
+        </div>
+        
+        <div class="generation-info">
+            <p><strong>Ouargla le {{ generation_date|date:"d/m/Y" }}</strong></p>
+            <p><strong>Généré par:</strong> {{ generated_by.username }} - {{ generation_date|date:"d/m/Y à H:i" }}</p>
+            {% if collaborator_info %}
+            <p><strong>{{ collaborator_info.is_collaborator|yesno:"Collaborateur,Utilisateur" }}:</strong> {{ collaborator_info.name }}</p>
+            {% endif %}
+        </div>
+        
+        <div class="operation-summary">
+            <h3>Opération {{ history_entry.numero }}</h3>
+            <div class="summary-grid">
+                <div class="summary-card">
+                    <h4>Type d'Opération</h4>
+                    <p class="amount">{{ history_entry.action|upper }}</p>
+                </div>
+                <div class="summary-card">
+                    <h4>Montant</h4>
+                    <p class="amount">{{ history_entry.amount|floatformat:2 }} DZD</p>
+                </div>
+                <div class="summary-card">
+                    <h4>Solde Après</h4>
+                    <p class="amount">{{ history_entry.balance_after|floatformat:2 }} DZD</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="main-content">
+            <div class="left-column">
+                <div class="section">
+                    <div class="section-header">
+                        Informations Générales
+                    </div>
+                    <div class="section-content">
+                        <div class="detail-grid">
+                            <div class="detail-item">
+                                <span class="detail-label">Date d'Opération</span>
+                                <span class="detail-value">{{ history_entry.date|date:"d/m/Y" }}</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Créé le</span>
+                                <span class="detail-value">{{ history_entry.created_at|date:"d/m/Y à H:i" }}</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Utilisateur</span>
+                                <span class="detail-value">
+                                    {% if history_entry.user %}
+                                        {{ history_entry.user.username }}
+                                        {% if history_entry.user.first_name or history_entry.user.last_name %}
+                                            ({{ history_entry.user.first_name }} {{ history_entry.user.last_name }})
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="empty">Non spécifié</span>
+                                    {% endif %}
+                                </span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Projet</span>
+                                <span class="detail-value">
+                                    {% if history_entry.project %}
+                                        {{ history_entry.project.name }}
+                                    {% else %}
+                                        <span class="empty">Aucun projet</span>
+                                    {% endif %}
+                                </span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Solde Avant</span>
+                                <span class="detail-value">{{ history_entry.balance_before|floatformat:2 }} DZD</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Généré par</span>
+                                <span class="detail-value">{{ generated_by.username }} - {{ generation_date|date:"d/m/Y à H:i" }}</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Preuve Jointe</span>
+                                <span class="detail-value">
+                                    {% if history_entry.operation.preuve_file %}
+                                        <span style="color: #28a745; font-weight: bold;">Oui</span>
+                                    {% else %}
+                                        <span style="color: #dc3545; font-weight: bold;">Non</span>
+                                    {% endif %}
+                                </span>
+                            </div>
+                        </div>
+                        
+                        {% if history_entry.description %}
+                        <div class="detail-item" style="margin-top: 8px;">
+                            <span class="detail-label">Description</span>
+                            <span class="detail-value">{{ history_entry.description }}</span>
+                        </div>
+                        {% endif %}
+                        
+                        <div class="badges-container">
+                            {% if is_collaborator %}
+                            <span class="badge badge-collaborator">Collaborateur</span>
+                            {% endif %}
+                            {% if is_dette %}
+                            <span class="badge badge-dette">Dette</span>
+                            {% endif %}
+                            {% if history_entry.operation.mode_paiement %}
+                            <span class="badge badge-mode">{{ history_entry.operation.get_mode_paiement_display }}</span>
+                            {% endif %}
+                            {% if history_entry.operation.income_source %}
+                            <span class="badge badge-source">{{ history_entry.operation.get_income_source_display }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                
+                {% if history_entry.operation %}
+                <div class="section">
+                    <div class="section-header">
+                        Détails de l'Opération
+                    </div>
+                    <div class="section-content">
+                        <div class="detail-grid">
+                            {% if history_entry.operation.mode_paiement %}
+                            <div class="detail-item">
+                                <span class="detail-label">Mode de Paiement</span>
+                                <span class="detail-value">{{ history_entry.operation.get_mode_paiement_display }}</span>
+                            </div>
+                            {% endif %}
+                            
+                            {% if history_entry.operation.income_source %}
+                            <div class="detail-item">
+                                <span class="detail-label">Source de Revenu</span>
+                                <span class="detail-value">{{ history_entry.operation.get_income_source_display }}</span>
+                            </div>
+                            {% endif %}
+                            
+                            {% if has_cheque and history_entry.operation.numero_cheque %}
+                            <div class="detail-item">
+                                <span class="detail-label">Numéro de Chèque</span>
+                                <span class="detail-value">{{ history_entry.operation.numero_cheque }}</span>
+                            </div>
+                            {% endif %}
+                            
+                            {% if has_virement and history_entry.operation.banque %}
+                            <div class="detail-item">
+                                <span class="detail-label">Banque</span>
+                                <span class="detail-value">{{ history_entry.operation.banque }}</span>
+                            </div>
+                            {% endif %}
+                            
+                            {% if history_entry.operation.nom_fournisseur %}
+                            <div class="detail-item">
+                                <span class="detail-label">Nom Fournisseur</span>
+                                <span class="detail-value">{{ history_entry.operation.nom_fournisseur }}</span>
+                            </div>
+                            {% endif %}
+                            
+                            {% if history_entry.operation.dette and history_entry.operation.dette.nom_crediteur %}
+                            <div class="detail-item">
+                                <span class="detail-label">Nom Créditeur</span>
+                                <span class="detail-value">{{ history_entry.operation.dette.nom_crediteur }}</span>
+                            </div>
+                            {% endif %}
+                        </div>
+                        
+                        {% if history_entry.operation.observation %}
+                        <div class="detail-item" style="margin-top: 8px;">
+                            <span class="detail-label">Observation</span>
+                            <span class="detail-value">{{ history_entry.operation.observation }}</span>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+            
+            <div class="right-column">
+                {% if history_entry.operation %}
+                <div class="section">
+                    <div class="section-header">
+                        Détails de l'Opération
+                    </div>
+                    <div class="section-content">
+                        <div class="detail-grid">
+                            {% if history_entry.operation.mode_paiement %}
+                            <div class="detail-item">
+                                <span class="detail-label">Mode de Paiement</span>
+                                <span class="detail-value">{{ history_entry.operation.get_mode_paiement_display }}</span>
+                            </div>
+                            {% endif %}
+                            
+                            {% if history_entry.operation.income_source %}
+                            <div class="detail-item">
+                                <span class="detail-label">Source de Revenu</span>
+                                <span class="detail-value">{{ history_entry.operation.get_income_source_display }}</span>
+                            </div>
+                            {% endif %}
+                            
+                            {% if has_cheque and history_entry.operation.numero_cheque %}
+                            <div class="detail-item">
+                                <span class="detail-label">Numéro de Chèque</span>
+                                <span class="detail-value">{{ history_entry.operation.numero_cheque }}</span>
+                            </div>
+                            {% endif %}
+                            
+                            {% if has_virement and history_entry.operation.banque %}
+                            <div class="detail-item">
+                                <span class="detail-label">Banque</span>
+                                <span class="detail-value">{{ history_entry.operation.banque }}</span>
+                            </div>
+                            {% endif %}
+                            
+                            {% if history_entry.operation.nom_fournisseur %}
+                            <div class="detail-item">
+                                <span class="detail-label">Nom Fournisseur</span>
+                                <span class="detail-value">{{ history_entry.operation.nom_fournisseur }}</span>
+                            </div>
+                            {% endif %}
+                            
+                            {% if history_entry.operation.dette and history_entry.operation.dette.nom_crediteur %}
+                            <div class="detail-item">
+                                <span class="detail-label">Nom Créditeur</span>
+                                <span class="detail-value">{{ history_entry.operation.dette.nom_crediteur }}</span>
+                            </div>
+                            {% endif %}
+                        </div>
+                        
+                        {% if history_entry.operation.observation %}
+                        <div class="detail-item" style="margin-top: 8px;">
+                            <span class="detail-label">Observation</span>
+                            <span class="detail-value">{{ history_entry.operation.observation }}</span>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="footer">
+            <div class="footer-content">
+                <div class="footer-info">
+                    <p><strong>Capital Social:</strong> 26.000.000.00 DA / RC: 30/00-0126507 B 22, NIF: 002230012650738, Art: 30010149062</p>
+                    <p><strong>RIB:</strong> AGB 032 003002875121208 86</p>
+                    <p><strong>Adresse:</strong> Local 100 Bt 06 Q, Cité Ennasr, Nouvelle Bamendile Ouargla</p>
+                    <p><strong>Contact:</strong> Tél/Fax: 029 60 93 13 - Email: echsahra@gmail.com</p>
+                    <p>Généré le {{ generation_date|date:"d/m/Y à H:i" }} par {{ generated_by.username }}{% if project %} - Projet: {{ project.name }}{% endif %}</p>
+                </div>
+                <div class="qr-code">
+                    {% if qr_code_base64 %}
+                    <img src="data:image/png;base64,{{ qr_code_base64 }}" alt="QR Code">
+                    {% else %}
+                    <span style="font-size: 8px; color: #999;">QR</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

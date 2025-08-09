@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ report_title }}</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 1cm;
+            @top-center {
+                content: "EURL E.C.H SAHRA - {{ report_title }}";
+                font-size: 9px;
+                color: #666;
+            }
+            @bottom-center {
+                content: "Page " counter(page) " sur " counter(pages);
+                font-size: 9px;
+                color: #666;
+            }
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 11px;
+            line-height: 1.3;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            max-width: 100%;
+            box-sizing: border-box;
+        }
+        
+        .page-content {
+            width: 100%;
+            max-width: 100%;
+            box-sizing: border-box;
+        }
+        
+        .main-content {
+            width: 100%;
+        }
+        
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #000;
+            padding-bottom: 10px;
+            width: 100%;
+        }
+        
+        .logo-left, .logo-right {
+            width: 70px;
+            height: 70px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #f9f9f9;
+            flex-shrink: 0;
+        }
+        
+        .company-info {
+            text-align: center;
+            flex-grow: 1;
+            margin: 0 15px;
+            max-width: calc(100% - 170px);
+        }
+        
+        .company-info h1 {
+            font-size: 18px;
+            font-weight: bold;
+            margin: 0 0 5px 0;
+            color: #000;
+        }
+        
+        .company-info h2 {
+            font-size: 12px;
+            margin: 0 0 10px 0;
+            color: #666;
+            font-weight: normal;
+        }
+        
+        .document-info {
+            text-align: center;
+            margin: 15px 0;
+        }
+        
+        .document-title {
+            font-size: 16px;
+            font-weight: bold;
+            text-decoration: underline;
+            margin-bottom: 5px;
+        }
+        
+        .document-number {
+            font-size: 14px;
+            font-weight: bold;
+        }
+        
+        .period-info {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 10px;
+            margin-bottom: 15px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        
+        .period-info h3 {
+            color: #495057;
+            margin: 0 0 8px 0;
+            font-size: 14px;
+        }
+        
+        .project-info {
+            background-color: #e3f2fd;
+            border: 1px solid #2196f3;
+            border-radius: 5px;
+            padding: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .project-info h3 {
+            color: #1976d2;
+            margin: 0 0 8px 0;
+            font-size: 14px;
+        }
+        
+        .project-details {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            font-size: 10px;
+        }
+        
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-bottom: 15px;
+            width: 100%;
+        }
+        
+        .summary-card {
+            background-color: #ffffff;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 12px;
+            text-align: center;
+        }
+        
+        .summary-card h4 {
+            margin: 0 0 5px 0;
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .summary-card .amount {
+            font-size: 16px;
+            font-weight: bold;
+            margin: 0;
+        }
+        
+        .encaissements .amount { color: #28a745; }
+        .accreance .amount { color: #17a2b8; }
+        .depenses .amount { color: #dc3545; }
+        .solde .amount { color: #007bff; }
+        .operations .amount { color: #6f42c1; }
+        
+        .operations-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 15px;
+            font-size: 9px;
+            page-break-inside: auto;
+        }
+        
+        .operations-table th,
+        .operations-table td {
+            border: 1px solid #dee2e6;
+            padding: 4px;
+            text-align: left;
+            page-break-inside: avoid;
+            word-wrap: break-word;
+        }
+        
+        .operations-table th {
+            background-color: #e9ecef;
+            font-weight: bold;
+            color: #495057;
+        }
+        
+        .operations-table thead {
+            display: table-header-group;
+        }
+        
+        .operations-table tbody tr {
+            page-break-inside: avoid;
+        }
+        
+        .operations-table tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+        
+        /* Color coding for amounts */
+        .amount-positive {
+            color: #28a745;
+            font-weight: bold;
+        }
+        
+        .amount-negative {
+            color: #dc3545;
+            font-weight: bold;
+        }
+        
+        .amount-accreance {
+            color: #17a2b8;
+            font-weight: bold;
+        }
+        
+        /* Collaborator highlighting - Yellow background */
+        .collaborator-row {
+            background-color: #fff3cd !important;
+        }
+        
+        .collaborator-amount {
+            background-color: #ffc107;
+            color: #856404;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-weight: bold;
+        }
+        
+        /* Dette highlighting - Red background */
+        .dette-row {
+            background-color: #f8d7da !important;
+        }
+        
+        .dette-amount {
+            background-color: #dc3545;
+            color: white;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-weight: bold;
+        }
+        
+        /* Accreance highlighting - Blue background */
+        .accreance-row {
+            background-color: #d1ecf1 !important;
+        }
+        
+        .accreance-amount {
+            background-color: #17a2b8;
+            color: white;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-weight: bold;
+        }
+        
+        .operation-type {
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 9px;
+            font-weight: bold;
+        }
+        
+        .type-encaissement {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        
+        .type-accreance {
+            background-color: #d1ecf1;
+            color: #0c5460;
+        }
+        
+        .type-depense {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        
+        .collaborator-badge {
+            background-color: #ffc107;
+            color: #856404;
+            padding: 1px 4px;
+            border-radius: 3px;
+            font-size: 8px;
+            font-weight: bold;
+            margin-left: 5px;
+        }
+        
+        .dette-badge {
+            background-color: #dc3545;
+            color: white;
+            padding: 1px 4px;
+            border-radius: 3px;
+            font-size: 8px;
+            font-weight: bold;
+            margin-left: 5px;
+        }
+        
+        .footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            margin-top: auto;
+            padding-top: 15px;
+            border-top: 1px solid #dee2e6;
+            font-size: 9px;
+            color: #666;
+            background-color: white;
+            width: 100%;
+            page-break-before: always;
+        }
+        
+        .footer-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+        
+        .footer-info {
+            flex-grow: 1;
+        }
+        
+        .footer-info p {
+            margin: 2px 0;
+            line-height: 1.2;
+        }
+        
+        .qr-code {
+            width: 60px;
+            height: 60px;
+            border: 1px solid #ddd;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #f9f9f9;
+            margin-left: 15px;
+        }
+        
+        .section-title {
+            background-color: #495057;
+            color: white;
+            padding: 8px;
+            margin: 20px 0 10px 0;
+            font-size: 13px;
+            font-weight: bold;
+        }
+        
+        .no-operations {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+            font-style: italic;
+        }
+        
+        .generation-info {
+            text-align: right;
+            margin-bottom: 10px;
+            font-size: 10px;
+            color: #666;
+        }
+        
+        .legend {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 8px;
+            margin-bottom: 15px;
+            font-size: 9px;
+        }
+        
+        .legend h4 {
+            margin: 0 0 5px 0;
+            font-size: 11px;
+            color: #495057;
+        }
+        
+        .legend-item {
+            display: inline-block;
+            margin-right: 15px;
+            margin-bottom: 3px;
+        }
+        
+        .legend-color {
+            display: inline-block;
+            width: 15px;
+            height: 10px;
+            margin-right: 5px;
+            border-radius: 2px;
+            vertical-align: middle;
+        }
+        
+        .page-break {
+            page-break-before: always;
+        }
+        
+        @media print {
+            .footer {
+                position: fixed;
+                bottom: 0;
+                width: 100%;
+                background-color: white;
+            }
+            
+            .page-content {
+                margin-bottom: 100px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="page-content">
+        <div class="main-content">
+            <div class="header">
+                <div class="logo-left">
+                    <span style="font-size: 10px; color: #999;">LOGO</span>
+                </div>
+                <div class="company-info">
+                    <h1>EURL E.C.H SAHRA</h1>
+                    <h2>Entreprise de Travaux de Construction Hydraulique et Génie Civil</h2>
+                    <div class="document-info">
+                        <div class="document-title">{{ report_title }}</div>
+                        <div class="document-number">N° : {{ generation_date|date:"Y" }}/{{ generation_date|date:"m" }}/{{ generation_date|date:"d" }}-{{ generation_date|date:"His" }}</div>
+                    </div>
+                </div>
+                <div class="logo-right">
+                    <span style="font-size: 10px; color: #999;">LOGO</span>
+                </div>
+            </div>
+            
+            <div class="generation-info">
+                <p><strong>Ouargla le {{ generation_date|date:"d/m/Y" }}</strong></p>
+                <p><strong>Généré par:</strong> {{ generated_by.username }} - {{ generation_date|date:"d/m/Y à H:i" }}</p>
+                {% if collaborator_info %}
+                <p><strong>{{ collaborator_info.is_collaborator|yesno:"Collaborateur,Utilisateur" }}:</strong> {{ collaborator_info.name }}</p>
+                {% endif %}
+            </div>
+            
+            <div class="project-info">
+                <h3>Informations du Projet</h3>
+                <div class="project-details">
+                    <div><strong>Nom:</strong> {{ project.name }}</div>
+                    <div><strong>Opération:</strong> {{ project.operation|default:"N/A" }}</div>
+                    <div><strong>N° Opération:</strong> {{ project.numero_operation|default:"N/A" }}</div>
+                    <div><strong>Date début:</strong> {{ project.date_debut|date:"d/m/Y" }}</div>
+                    <div><strong>Durée:</strong> {{ project.period_months }} mois</div>
+                    {% if project.collaborator_name %}
+                    <div><strong>Collaborateur:</strong> {{ project.collaborator_name }}</div>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div class="period-info">
+                <h3>Résumé de la période : {{ period_display }}</h3>
+                <div class="summary-grid">
+                    {% if by_collaborator %}
+                        <div class="summary-card encaissements">
+                            <h4>Total Encaissements</h4>
+                            <p class="amount">+{{ total_encaissements|floatformat:2 }} DZD</p>
+                        </div>
+                        <div class="summary-card operations">
+                            <h4>Nombre d'Opérations</h4>
+                            <p class="amount">{{ total_operations }}</p>
+                        </div>
+                        <div class="summary-card solde">
+                            <h4>Solde Net</h4>
+                            <p class="amount">{{ solde_net|floatformat:2 }} DZD</p>
+                        </div>
+                        <div class="summary-card" style="background-color: #fff3cd;">
+                            <h4>Mode Collaborateur</h4>
+                            <p class="amount" style="color: #856404;">{{ project.collaborator_name|default:"N/A" }}</p>
+                        </div>
+                    {% else %}
+                        <div class="summary-card accreance">
+                            <h4>Total Accréance</h4>
+                            <p class="amount">+{{ total_accreance|floatformat:2 }} DZD</p>
+                        </div>
+                        <div class="summary-card depenses">
+                            <h4>Total Dépenses</h4>
+                            <p class="amount">-{{ total_depenses|floatformat:2 }} DZD</p>
+                        </div>
+                        <div class="summary-card solde">
+                            <h4>Bénéfice Net</h4>
+                            <p class="amount">{{ solde_net|floatformat:2 }} DZD</p>
+                        </div>
+                        <div class="summary-card operations">
+                            <h4>Nombre d'Opérations</h4>
+                            <p class="amount">{{ total_operations }}</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+            
+            {% if history %}
+                {% if not by_collaborator %}
+                <div class="legend">
+                    <h4>Légende des couleurs:</h4>
+                    <div class="legend-item">
+                        <span class="legend-color" style="background-color: #d1ecf1;"></span>
+                        Accréance (Revenus)
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color" style="background-color: #f8d7da;"></span>
+                        Dépenses
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color" style="background-color: #f8d7da;"></span>
+                        Opérations liées à une dette
+                    </div>
+                </div>
+                {% else %}
+                <div class="legend">
+                    <h4>Légende des couleurs:</h4>
+                    <div class="legend-item">
+                        <span class="legend-color" style="background-color: #fff3cd;"></span>
+                        Opérations par collaborateur
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color" style="background-color: #f8d7da;"></span>
+                        Opérations liées à une dette
+                    </div>
+                </div>
+                {% endif %}
+                
+                <div class="section-title">
+                    {% if by_collaborator %}
+                        Détail des Encaissements Collaborateur
+                    {% else %}
+                        Détail des Accréances et Dépenses
+                    {% endif %}
+                </div>
+                <table class="operations-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>N° Opération</th>
+                            <th>Description</th>
+                            {% if by_collaborator %}
+                                <th>Encaissement</th>
+                                <th>Solde Après</th>
+                            {% else %}
+                                <th>Accréance</th>
+                                <th>Dépenses</th>
+                            {% endif %}
+                            {% if has_cheque %}
+                            <th>N° Chèque</th>
+                            {% endif %}
+                            <th>Nom Fournisseur</th>
+                            {% if has_virement %}
+                            <th>Banque</th>
+                            {% endif %}
+                            {% if not by_collaborator %}
+                            <th>Nom Créditeur</th>
+                            {% endif %}
+                            <th>Utilisateur</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for entry in history %}
+                        <tr class="{% if entry.type == 'accreance' %}accreance-row{% elif entry.is_dette %}dette-row{% elif entry.is_collaborator %}collaborator-row{% endif %}">
+                            <td>{{ entry.date|date:"d/m/Y" }}<br><small>{{ entry.created_at|date:"H:i" }}</small></td>
+                            <td>{{ entry.numero|default:"-" }}</td>
+                            <td>
+                                {{ entry.description|default:"-" }}
+                                {% if entry.operation and entry.operation.observation %}
+                                    <br><small style="color: #666;">{{ entry.operation.observation }}</small>
+                                {% endif %}
+                                {% if entry.is_collaborator %}
+                                    <span class="collaborator-badge">COLLAB</span>
+                                {% endif %}
+                                {% if entry.is_dette %}
+                                    <span class="dette-badge">DETTE</span>
+                                {% endif %}
+                            </td>
+                            {% if by_collaborator %}
+                                <td>
+                                    {% if entry.type == 'encaissement' %}
+                                        {% if entry.is_dette %}
+                                            <span class="dette-amount">{{ entry.amount|floatformat:2 }} DZD</span>
+                                        {% else %}
+                                            <span class="collaborator-amount">{{ entry.amount|floatformat:2 }} DZD</span>
+                                        {% endif %}
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
+                                <td>{{ entry.balance_after|floatformat:2|default:"-" }} DZD</td>
+                            {% else %}
+                                <td>
+                                    {% if entry.type == 'accreance' %}
+                                        <span class="accreance-amount">{{ entry.amount|floatformat:2 }} DZD</span>
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if entry.type == 'depense' %}
+                                        {% if entry.is_dette %}
+                                            <span class="dette-amount">{{ entry.amount|floatformat:2 }} DZD</span>
+                                        {% else %}
+                                            <span class="amount-negative">{{ entry.amount|floatformat:2 }} DZD</span>
+                                        {% endif %}
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
+                            {% endif %}
+                            {% if has_cheque %}
+                            <td>
+                                {% if entry.operation and entry.operation.mode_paiement == 'cheque' %}
+                                    {{ entry.operation.numero_cheque|default:"-" }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            {% endif %}
+                            <td>
+                                {% if entry.operation and entry.operation.nom_fournisseur %}
+                                    {{ entry.operation.nom_fournisseur }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            {% if has_virement %}
+                            <td>
+                                {% if entry.operation and entry.operation.mode_paiement == 'virement' %}
+                                    {{ entry.operation.banque|default:"-" }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            {% endif %}
+                            {% if not by_collaborator %}
+                            <td>
+                                {% if entry.operation and entry.operation.dette and entry.operation.dette.nom_crediteur %}
+                                    {{ entry.operation.dette.nom_crediteur }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            {% endif %}
+                            <td>
+                                {% if entry.user %}
+                                    {{ entry.user.username }}
+                                    {% if entry.user.first_name or entry.user.last_name %}
+                                        <br><small>({{ entry.user.first_name }} {{ entry.user.last_name }})</small>
+                                    {% endif %}
+                                {% else %}
+                                    -
+                                {% endif %}
+                                {% if entry.is_collaborator and project and project.collaborator_name %}
+                                    <br><small style="color: #856404; font-weight: bold;">via {{ project.collaborator_name }}</small>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        <tr style="border-top: 2px solid #495057; font-weight: bold; background-color: #e9ecef;">
+                            <td colspan="3"><strong>TOTAUX</strong></td>
+                            {% if by_collaborator %}
+                                <td><span class="amount-positive">{{ total_encaissements|floatformat:2 }} DZD</span></td>
+                                <td><strong>Solde Net: {{ solde_net|floatformat:2 }} DZD</strong></td>
+                            {% else %}
+                                <td><span class="amount-accreance">{{ total_accreance|floatformat:2 }} DZD</span></td>
+                                <td><span class="amount-negative">{{ total_depenses|floatformat:2 }} DZD</span></td>
+                            {% endif %}
+                            {% if has_cheque %}
+                            <td>-</td>
+                            {% endif %}
+                            <td>-</td>
+                            {% if has_virement %}
+                            <td>-</td>
+                            {% endif %}
+                            {% if not by_collaborator %}
+                            <td>-</td>
+                            {% endif %}
+                            <td>{{ total_operations }} opération(s)</td>
+                        </tr>
+                        {% if not by_collaborator %}
+                        <tr style="border-top: 1px solid #495057; font-weight: bold; background-color: #d4edda;">
+                            <td colspan="5"><strong>BÉNÉFICE NET (Accréance - Dépenses)</strong></td>
+                            {% if has_cheque %}
+                            <td>-</td>
+                            {% endif %}
+                            <td>-</td>
+                            {% if has_virement %}
+                            <td>-</td>
+                            {% endif %}
+                            <td>-</td>
+                            <td><strong style="color: #155724;">{{ solde_net|floatformat:2 }} DZD</strong></td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            {% else %}
+                <div class="no-operations">
+                    <p>Aucune opération trouvée pour les critères sélectionnés.</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- Footer on separate page -->
+    <div class="footer">
+        <div class="footer-content">
+            <div class="footer-info">
+                <p><strong>Entreprise au Capital Social de :</strong> 26.000.000.00 DA / RC : 30/ 00-0126507 B 22, NIF : 002230012650738, Art : 30010149062 RIB : AGB 032 003002875121208 86</p>
+                <p><strong>Adresse :</strong> Local 100 Bt 06 Q, Cité Ennasr, Nouvelle Bamendile Ouargla, Tél/Fax : 029 60 93 13. Email : echsahra@gmail.com</p>
+                <p>Rapport généré le {{ generation_date|date:"d/m/Y à H:i" }} par {{ generated_by.username }} - EURL E.C.H SAHRA - Système de Gestion ERP</p>
+                <p><strong>Projet:</strong> {{ project.name }}{% if collaborator_info %} - {{ collaborator_info.is_collaborator|yesno:"Collaborateur,Utilisateur" }}: {{ collaborator_info.name }}{% endif %}</p>
+            </div>
+            <div class="qr-code">
+                <img src="data:image/png;base64,{{ qr_code_base64 }}" alt="QR Code" style="width: 100%; height: 100%; object-fit: contain;">
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -24,3 +24,5 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         data['username'] = user.username
         data['groups'] = list(user_groups)
         return data
+
+

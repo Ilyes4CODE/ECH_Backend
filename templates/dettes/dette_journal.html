@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ report_title }}</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 15mm;
+            @top-center {
+                content: "EURL E.C.H SAHRA - {{ report_title }}";
+                font-size: 9px;
+                color: #666;
+            }
+            @bottom-center {
+                content: "Page " counter(page) " sur " counter(pages);
+                font-size: 9px;
+                color: #666;
+            }
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 11px;
+            line-height: 1.4;
+            color: #333;
+            background-color: white;
+        }
+        
+        .container {
+            width: 100%;
+            max-width: 210mm;
+            margin: 0 auto;
+            padding-bottom: 90px;
+        }
+        
+        /* Header Section */
+        .header {
+            display: table;
+            width: 100%;
+            border-bottom: 2px solid #000;
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .header-row {
+            display: table-row;
+        }
+        
+        .logo-cell {
+            display: table-cell;
+            width: 80px;
+            vertical-align: middle;
+        }
+        
+        .logo-box {
+            width: 70px;
+            height: 70px;
+            border: 1px solid #ddd;
+            background-color: #f9f9f9;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            color: #999;
+            font-weight: bold;
+        }
+        
+        .company-cell {
+            display: table-cell;
+            text-align: center;
+            vertical-align: middle;
+            padding: 0 20px;
+        }
+        
+        .company-name {
+            font-size: 20px;
+            font-weight: bold;
+            color: #000;
+            margin-bottom: 5px;
+        }
+        
+        .company-subtitle {
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 15px;
+        }
+        
+        .document-info {
+            margin-top: 10px;
+        }
+        
+        .document-title {
+            font-size: 16px;
+            font-weight: bold;
+            text-decoration: underline;
+            margin-bottom: 5px;
+        }
+        
+        .document-number {
+            font-size: 14px;
+            font-weight: bold;
+        }
+        
+        /* Generation Info */
+        .generation-info {
+            text-align: right;
+            margin-bottom: 20px;
+            font-size: 11px;
+            color: #333;
+        }
+        
+        .generation-info p {
+            margin-bottom: 3px;
+        }
+        
+        /* Dette Details Section */
+        .dette-section {
+            background-color: #f8f9fa;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 25px;
+        }
+        
+        .section-header {
+            font-size: 16px;
+            font-weight: bold;
+            color: #495057;
+            margin-bottom: 15px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 15px;
+            font-size: 11px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        
+        .badge-active {
+            background-color: #dc3545;
+            color: white;
+        }
+        
+        .badge-completed {
+            background-color: #28a745;
+            color: white;
+        }
+        
+        /* Dette Details Grid */
+        .dette-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .dette-item {
+            background-color: white;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 12px;
+        }
+        
+        .dette-item-label {
+            font-size: 11px;
+            color: #666;
+            margin-bottom: 5px;
+            font-weight: normal;
+        }
+        
+        .dette-item-value {
+            font-size: 14px;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .amount-original { color: #007bff; }
+        .amount-paid { color: #28a745; }
+        .amount-remaining { color: #dc3545; }
+        
+        /* Progress Bar */
+        .progress-section {
+            grid-column: 1 / -1;
+            background-color: white;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 15px;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 25px;
+            background-color: #f8f9fa;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid #dee2e6;
+            margin-top: 8px;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #28a745 0%, #20c997 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+            transition: width 0.3s ease;
+        }
+        
+        /* Description */
+        .description-section {
+            grid-column: 1 / -1;
+            background-color: white;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 12px;
+            margin-top: 15px;
+        }
+        
+        .description-text {
+            font-style: italic;
+            color: #666;
+            margin-top: 5px;
+        }
+        
+        /* Summary Cards */
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+        
+        .summary-card {
+            background-color: white;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 15px;
+            text-align: center;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .summary-card-label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 8px;
+        }
+        
+        .summary-card-value {
+            font-size: 16px;
+            font-weight: bold;
+        }
+        
+        /* Payments Table */
+        .payments-section {
+            margin-top: 25px;
+        }
+        
+        .payments-header {
+            background-color: #495057;
+            color: white;
+            padding: 12px;
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 0;
+        }
+        
+        .payments-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+            background-color: white;
+        }
+        
+        .payments-table th,
+        .payments-table td {
+            border: 1px solid #dee2e6;
+            padding: 8px 6px;
+            text-align: left;
+            vertical-align: top;
+            font-size: 10px;
+        }
+        
+        .payments-table th {
+            background-color: #e9ecef;
+            font-weight: bold;
+            color: #495057;
+            text-align: center;
+            font-size: 11px;
+        }
+        
+        .payments-table tbody tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+        
+        .payment-date {
+            white-space: nowrap;
+            min-width: 70px;
+        }
+        
+        .payment-amount {
+            background-color: #28a745;
+            color: white;
+            padding: 3px 6px;
+            border-radius: 3px;
+            font-weight: bold;
+            display: inline-block;
+            min-width: 85px;
+            text-align: center;
+            font-size: 10px;
+        }
+        
+        .payment-mode {
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-size: 9px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        
+        .mode-especes {
+            background-color: #ffc107;
+            color: #856404;
+        }
+        
+        .mode-cheque {
+            background-color: #17a2b8;
+            color: white;
+        }
+        
+        .mode-virement {
+            background-color: #6f42c1;
+            color: white;
+        }
+        
+        .proof-exists {
+            color: #28a745;
+            font-weight: bold;
+        }
+        
+        .proof-none {
+            color: #dc3545;
+        }
+        
+        /* Total Row */
+        .total-row {
+            border-top: 3px solid #495057;
+            background-color: #e9ecef;
+        }
+        
+        .total-row td {
+            font-weight: bold;
+            font-size: 11px;
+            padding: 10px 6px;
+        }
+        
+        /* No Payments */
+        .no-payments {
+            text-align: center;
+            padding: 40px 20px;
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            color: #666;
+        }
+        
+        .no-payments p {
+            margin-bottom: 10px;
+        }
+        
+        .no-payments strong {
+            color: #dc3545;
+        }
+        
+        /* Footer */
+        .footer {
+            position: fixed;
+            bottom: 15mm;
+            left: 15mm;
+            right: 15mm;
+            border-top: 2px solid #495057;
+            padding-top: 15px;
+            background-color: white;
+            font-size: 9px;
+            color: #666;
+        }
+        
+        .footer-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+        
+        .footer-info {
+            flex: 1;
+            margin-right: 15px;
+        }
+        
+        .footer-info p {
+            margin-bottom: 3px;
+            line-height: 1.3;
+        }
+        
+        .qr-section {
+            width: 70px;
+            height: 70px;
+            border: 1px solid #ddd;
+            background-color: #f9f9f9;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        
+        .qr-section img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+        
+        /* Print Optimization */
+        @media print {
+            body {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            
+            .footer {
+                position: fixed;
+                bottom: 0;
+            }
+            
+            .payments-table thead {
+                display: table-header-group;
+            }
+            
+            .payments-table tbody tr {
+                page-break-inside: avoid;
+            }
+        }
+        
+        /* Responsive adjustments */
+        @media (max-width: 800px) {
+            .dette-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .summary-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .header {
+                display: block;
+            }
+            
+            .logo-cell,
+            .company-cell {
+                display: block;
+                text-align: center;
+                margin-bottom: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div class="header-row">
+                <div class="logo-cell">
+                    <div class="logo-box">LOGO</div>
+                </div>
+                <div class="company-cell">
+                    <div class="company-name">EURL E.C.H SAHRA</div>
+                    <div class="company-subtitle">Entreprise de Travaux de Construction Hydraulique et Génie Civil</div>
+                    <div class="document-info">
+                        <div class="document-title">{{ report_title }}</div>
+                        <div class="document-number">N° : {{ generation_date|date:"Y" }}/{{ generation_date|date:"m" }}/{{ generation_date|date:"d" }}-{{ generation_date|date:"His" }}</div>
+                    </div>
+                </div>
+                <div class="logo-cell">
+                    <div class="logo-box">LOGO</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Generation Info -->
+        <div class="generation-info">
+            <p><strong>Ouargla le {{ generation_date|date:"d/m/Y" }}</strong></p>
+            <p><strong>Généré par:</strong> {{ generated_by.username }} - {{ generation_date|date:"d/m/Y à H:i" }}</p>
+        </div>
+        
+        <!-- Dette Details -->
+        <div class="dette-section">
+            <div class="section-header">
+                Détails de la Dette
+                <span class="status-badge {% if is_completed %}badge-completed{% else %}badge-active{% endif %}">
+                    {{ dette.status|upper }}
+                </span>
+            </div>
+            
+            <div class="dette-grid">
+                <div class="dette-item">
+                    <div class="dette-item-label">Créancier</div>
+                    <div class="dette-item-value">{{ dette.creditor_name }}</div>
+                </div>
+                
+                <div class="dette-item">
+                    <div class="dette-item-label">Date de Création</div>
+                    <div class="dette-item-value">{{ dette.date_created|date:"d/m/Y à H:i" }}</div>
+                </div>
+                
+                <div class="dette-item">
+                    <div class="dette-item-label">Montant Original</div>
+                    <div class="dette-item-value amount-original">{{ dette.original_amount|floatformat:2 }} DZD</div>
+                </div>
+                
+                <div class="dette-item">
+                    <div class="dette-item-label">Montant Payé</div>
+                    <div class="dette-item-value amount-paid">{{ total_paid|floatformat:2 }} DZD</div>
+                </div>
+                
+                <div class="dette-item">
+                    <div class="dette-item-label">Montant Restant</div>
+                    <div class="dette-item-value amount-remaining">{{ remaining_amount|floatformat:2 }} DZD</div>
+                </div>
+                
+                <div class="dette-item">
+                    <div class="dette-item-label">Nombre de Paiements</div>
+                    <div class="dette-item-value">{{ payment_count }} paiement(s)</div>
+                </div>
+                
+                {% if dette.project %}
+                <div class="dette-item">
+                    <div class="dette-item-label">Projet Associé</div>
+                    <div class="dette-item-value">{{ dette.project.name }}</div>
+                </div>
+                {% endif %}
+                
+                {% if dette.completed_at %}
+                <div class="dette-item">
+                    <div class="dette-item-label">Date de Completion</div>
+                    <div class="dette-item-value">{{ dette.completed_at|date:"d/m/Y à H:i" }}</div>
+                </div>
+                {% endif %}
+                
+                <!-- Progress Bar -->
+                <div class="progress-section">
+                    <div class="dette-item-label">Progression du Paiement</div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: {{ completion_percentage|floatformat:1 }}%;">
+                            {{ completion_percentage|floatformat:1 }}%
+                        </div>
+                    </div>
+                </div>
+                
+                {% if dette.description %}
+                <div class="description-section">
+                    <div class="dette-item-label">Description</div>
+                    <div class="description-text">{{ dette.description }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Summary Cards -->
+        <div class="summary-grid">
+            <div class="summary-card">
+                <div class="summary-card-label">Montant Original</div>
+                <div class="summary-card-value amount-original">{{ dette.original_amount|floatformat:2 }} DZD</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-card-label">Total Payé</div>
+                <div class="summary-card-value amount-paid">{{ total_paid|floatformat:2 }} DZD</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-card-label">Montant Restant</div>
+                <div class="summary-card-value amount-remaining">{{ remaining_amount|floatformat:2 }} DZD</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-card-label">Nombre de Paiements</div>
+                <div class="summary-card-value">{{ payment_count }}</div>
+            </div>
+        </div>
+        
+        <!-- Payments Section -->
+        <div class="payments-section">
+            <div class="payments-header">Historique des Paiements</div>
+            
+            {% if payments %}
+                <table class="payments-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Montant Payé</th>
+                            <th>Mode de Paiement</th>
+                            {% if has_cheque %}
+                            <th>N° Chèque</th>
+                            {% endif %}
+                            <th>Nom Fournisseur</th>
+                            {% if has_virement %}
+                            <th>Banque</th>
+                            {% endif %}
+                            <th>Description</th>
+                            <th>Payé par</th>
+                            <th>Preuve</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for payment in payments %}
+                        <tr>
+                            <td class="payment-date">
+                                {{ payment.payment_date|date:"d/m/Y" }}<br>
+                                <small>{{ payment.payment_date|date:"H:i" }}</small>
+                            </td>
+                            <td>
+                                <span class="payment-amount">{{ payment.amount_paid|floatformat:2 }} DZD</span>
+                            </td>
+                            <td>
+                                <span class="payment-mode mode-{{ payment.mode_paiement }}">
+                                    {{ payment.get_mode_paiement_display|upper }}
+                                </span>
+                            </td>
+                            {% if has_cheque %}
+                            <td>
+                                {% if payment.mode_paiement == 'cheque' %}
+                                    {{ payment.numero_cheque|default:"-" }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            {% endif %}
+                            <td>{{ payment.nom_fournisseur|default:"-" }}</td>
+                            {% if has_virement %}
+                            <td>
+                                {% if payment.mode_paiement == 'virement' %}
+                                    {{ payment.banque|default:"-" }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            {% endif %}
+                            <td>{{ payment.description|default:"-" }}</td>
+                            <td>
+                                {% if payment.created_by %}
+                                    {{ payment.created_by.username }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if payment.preuve_file %}
+                                    <span class="proof-exists">Oui</span>
+                                {% else %}
+                                    <span class="proof-none">Non</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        
+                        <!-- Total Row -->
+                        <tr class="total-row">
+                            <td><strong>TOTAL</strong></td>
+                            <td><span class="payment-amount">{{ total_paid|floatformat:2 }} DZD</span></td>
+                            <td colspan="{% if has_cheque and has_virement %}6{% elif has_cheque or has_virement %}5{% else %}4{% endif %}">
+                                <strong>{{ payment_count }} paiement(s) | Restant: {{ remaining_amount|floatformat:2 }} DZD</strong>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            {% else %}
+                <div class="no-payments">
+                    <p>Aucun paiement enregistré pour cette dette.</p>
+                    <p>Montant total à payer : <strong>{{ dette.original_amount|floatformat:2 }} DZD</strong></p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- Footer -->
+    <div class="footer">
+        <div class="footer-content">
+            <div class="footer-info">
+                <p><strong>Entreprise au Capital Social de :</strong> 26.000.000.00 DA / RC : 30/ 00-0126507 B 22, NIF : 002230012650738, Art : 30010149062 RIB : AGB 032 003002875121208 86</p>
+                <p><strong>Adresse :</strong> Local 100 Bt 06 Q, Cité Ennasr, Nouvelle Bamendile Ouargla, Tél/Fax : 029 60 93 13. Email : echsahra@gmail.com</p>
+                <p>Journal de Dette généré le {{ generation_date|date:"d/m/Y à H:i" }} par {{ generated_by.username }} - EURL E.C.H SAHRA - Système de Gestion ERP</p>
+                <p><strong>Dette ID:</strong> {{ dette.id }} - <strong>Créancier:</strong> {{ dette.creditor_name }} - <strong>Statut:</strong> {{ dette.status|upper }}</p>
+            </div>
+            <div class="qr-section">
+                {% if qr_code_base64 %}
+                <img src="data:image/png;base64,{{ qr_code_base64 }}" alt="QR Code">
+                {% else %}
+                <span style="font-size: 8px; color: #999;">QR CODE</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</body>
+</html>

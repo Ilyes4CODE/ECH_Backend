@@ -32,6 +32,7 @@ class CaisseOperation(models.Model):
         ('personnelle', 'Personnelle'),
         ('collaborator', 'Collaborateur'),
         ('dette', 'Dette'),
+        ('autre', 'Autre'),
     ]
     
     operation_type = models.CharField(max_length=20, choices=OPERATION_TYPES)
@@ -43,13 +44,14 @@ class CaisseOperation(models.Model):
     # For virement
     nom_fournisseur = models.CharField(max_length=200, blank=True, null=True)
     banque = models.CharField(max_length=200, blank=True, null=True)
-    
     # For cheque
     numero_cheque = models.CharField(max_length=100, blank=True, null=True)
     
     # For encaissement
     income_source = models.CharField(max_length=20, choices=INCOME_SOURCES, blank=True, null=True)
-    bank_name = models.CharField(max_length=200, blank=True, null=True)  # for personnelle source
+    
+    observation = models.TextField(blank=True, null=True, help_text="Required when income_source is 'autre'")
+    by_collaborator = models.BooleanField(default=False, help_text="Indicates if the operation is by a collaborator")
     
     # Relations
     user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
@@ -58,13 +60,14 @@ class CaisseOperation(models.Model):
     
     balance_before = models.DecimalField(max_digits=15, decimal_places=2)
     balance_after = models.DecimalField(max_digits=15, decimal_places=2)
+    date = models.DateField(help_text="User input date")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.operation_type} - {self.amount} DZD - {self.created_at.strftime('%d/%m/%Y %H:%M')}"
+        return f"{self.operation_type} - {self.amount} DZD - {self.date}"
 
 class Project(models.Model):
     name = models.CharField(max_length=200)
@@ -83,9 +86,9 @@ class Project(models.Model):
     collaborator_name = models.CharField(max_length=200, blank=True, null=True)
     
     # Financial tracking
-    total_depenses = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
-    total_recus = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
-    total_benefices = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
+    total_depenses = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'))
+    total_accreance = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'))
+    total_benefices = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'))
     
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_projects')
     created_at = models.DateTimeField(auto_now_add=True)
@@ -93,40 +96,24 @@ class Project(models.Model):
 
     def __str__(self):
         return self.name
-
+    
     def calculate_benefices(self):
-        return self.total_recus - self.total_depenses
-
+        """Calculate and update benefices (total_accreance - total_depenses)"""
+        self.total_benefices = self.total_accreance - self.total_depenses
+        return self.total_benefices
+    
+    def update_benefices(self):
+        """Update benefices and save to database"""
+        self.calculate_benefices()
+        self.save(update_fields=['total_benefices'])
+    
     def save(self, *args, **kwargs):
-        self.total_benefices = self.calculate_benefices()
+        # Always recalculate benefices before saving
+        self.calculate_benefices()
         super().save(*args, **kwargs)
 
     def get_bon_livraison_history(self):
         return self.bon_livraisons.select_related('created_by', 'pdf_generated_by').order_by('-created_at')
-
-class ProjectHistory(models.Model):
-    ACTION_CHOICES = [
-        ('created', 'Created'),
-        ('updated', 'Updated'),
-        ('depense_added', 'Dépense Added'),
-        ('recu_added', 'Reçu Added'),
-        ('collaborator_changed', 'Collaborator Changed'),
-        ('files_updated', 'Files Updated'),
-    ]
-    
-    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='history')
-    action = models.CharField(max_length=20, choices=ACTION_CHOICES)
-    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
-    description = models.TextField(blank=True)
-    old_values = models.JSONField(blank=True, null=True)
-    new_values = models.JSONField(blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ['-created_at']
-
-    def __str__(self):
-        return f"{self.project.name} - {self.action} by {self.user.username if self.user else 'Unknown'}"
 
 class Dette(models.Model):
     STATUS_CHOICES = [
@@ -187,20 +174,37 @@ class CaisseHistory(models.Model):
         ('balance_adjustment', 'Balance Adjustment'),
     ]
     
+    numero = models.CharField(max_length=10, unique=True, editable=False)
     action = models.CharField(max_length=20, choices=ACTION_CHOICES)
     amount = models.DecimalField(max_digits=15, decimal_places=2)
     balance_before = models.DecimalField(max_digits=15, decimal_places=2)
     balance_after = models.DecimalField(max_digits=15, decimal_places=2)
     operation = models.ForeignKey(CaisseOperation, on_delete=models.SET_NULL, null=True, blank=True)
     user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    project = models.ForeignKey(Project, on_delete=models.SET_NULL, null=True, blank=True)
     description = models.TextField(blank=True)
+    date = models.DateField(help_text="User input date")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ['-created_at']
 
+    def save(self, *args, **kwargs):
+        if not self.numero:
+            last_history = CaisseHistory.objects.order_by('-numero').first()
+            if last_history and last_history.numero.startswith('ECH'):
+                try:
+                    last_number = int(last_history.numero[3:])
+                    new_number = last_number + 1
+                except (ValueError, IndexError):
+                    new_number = 1
+            else:
+                new_number = 1
+            self.numero = f"ECH{new_number:03d}"
+        super().save(*args, **kwargs)
+
     def __str__(self):
-        return f"{self.action} - {self.amount} DZD on {self.created_at.strftime('%d/%m/%Y %H:%M')}"
+        return f"{self.numero} - {self.action} - {self.amount} DZD on {self.date}"
 
 class Product(models.Model):
     name = models.CharField(max_length=200)
@@ -373,7 +377,6 @@ class OrdreDeMission(models.Model):
         super().save(*args, **kwargs)
     
     def get_date_retour_display(self):
-        """Return formatted date or 'FIN DE MISSION' if None"""
         if self.date_retour:
             return self.date_retour.strftime('%d/%m/%Y')
         return 'FIN DE MISSION'
@@ -408,7 +411,7 @@ def bon_commande_pdf_path(instance, filename):
 class BonDeCommande(models.Model):
     bc_number = models.CharField(max_length=50, unique=True, blank=True)
     date_commande = models.DateField(auto_now_add=True)
-    description = models.TextField(blank=True)  # Added description field
+    description = models.TextField(blank=True)
     total_ht = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_bon_commandes')
     pdf_generated_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='generated_bc_pdfs')
@@ -491,3 +494,38 @@ class BonDeCommandeItem(models.Model):
 
     def __str__(self):
         return f"{self.designation} - {self.quantity} x {self.prix_unitaire}"
+
+def revenu_pdf_path(instance, filename):
+    return f'revenu_pdfs/{instance.project.id}/{instance.revenu_code}.pdf'
+
+class Revenu(models.Model):
+    revenu_code = models.CharField(max_length=50, unique=True)  # Remove blank=True to make it required
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='revenus')
+    montant = models.DecimalField(max_digits=15, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))])
+    date = models.DateField()
+    pdf_file = models.FileField(upload_to=revenu_pdf_path, blank=True, null=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_revenus')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Revenu {self.revenu_code} - {self.montant} DZD - {self.project.name}"
+
+    def save(self, *args, **kwargs):
+        # Don't auto-generate revenu_code anymore since user will provide it
+        
+        # Only update project totals when creating new revenu
+        if not self.pk:
+            # Add to project's total_accreance
+            self.project.total_accreance += self.montant
+            # Subtract from estimated_budget (if you still want this behavior)
+            if self.project.estimated_budget >= self.montant:
+                self.project.estimated_budget -= self.montant
+            # Calculate benefices (total_accreance - total_depenses)
+            self.project.total_benefices = self.project.total_accreance - self.project.total_depenses
+            self.project.save(update_fields=['total_accreance', 'estimated_budget', 'total_benefices'])
+        
+        super().save(*args, **kwargs)
