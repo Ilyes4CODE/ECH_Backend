@@ -7,204 +7,233 @@
     <style>
         @page {
             size: A4;
-            margin: 15mm;
-            @top-center {
-                content: "EURL E.C.H SAHRA - {{ report_title }}";
-                font-size: 9px;
-                color: #666;
-            }
-            @bottom-center {
-                content: "Page " counter(page) " sur " counter(pages);
-                font-size: 9px;
-                color: #666;
-            }
-        }
-        
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+            margin: 1cm;
         }
         
         body {
             font-family: Arial, sans-serif;
-            font-size: 11px;
+            font-size: 12px;
             line-height: 1.4;
-            color: #333;
-            background-color: white;
+            color: #000;
+            margin: 0;
+            padding: 0;
+            background-color: #fff;
         }
         
-        .container {
+        .page {
             width: 100%;
-            max-width: 210mm;
-            margin: 0 auto;
-            padding-bottom: 90px;
+            min-height: calc(100vh - 4cm); /* Adjusted to account for footer space */
+            page-break-after: always;
+            padding-bottom: 0;
+            position: relative;
+            display: flex;
+            flex-direction: column;
         }
         
-        /* Header Section */
+        .page:last-child {
+            page-break-after: avoid;
+        }
+        
+        .page-content {
+            flex: 1;
+            padding-bottom: 80px; /* Space for footer */
+        }
+        
         .header {
-            display: table;
-            width: 100%;
-            border-bottom: 2px solid #000;
-            padding-bottom: 10px;
-            margin-bottom: 15px;
+            text-align: center;
+            border: 2px solid #000;
+            padding: 15px;
+            margin-bottom: 20px;
+            position: relative;
         }
         
-        .header-row {
-            display: table-row;
+        .company-name {
+            font-size: 18px;
+            font-weight: bold;
+            margin: 0 0 5px 0;
+            text-transform: uppercase;
         }
         
-        .logo-cell {
-            display: table-cell;
-            width: 80px;
-            vertical-align: middle;
+        .company-subtitle {
+            font-size: 12px;
+            margin: 0 0 10px 0;
+            font-style: italic;
         }
         
-        .logo-box {
+        .logo-left, .logo-right {
             width: 70px;
             height: 70px;
-            border: 1px solid #ddd;
-            background-color: #f9f9f9;
             display: flex;
             align-items: center;
             justify-content: center;
+            background-color: white;
+            flex-shrink: 0;
+            border: 1px solid #ddd;
             font-size: 10px;
             color: #999;
             font-weight: bold;
         }
         
-        .company-cell {
-            display: table-cell;
-            text-align: center;
-            vertical-align: middle;
-            padding: 0 20px;
+        .logo-left {
+            position: absolute;
+            top: 15px;
+            left: 15px;
         }
         
-        .company-name {
-            font-size: 20px;
-            font-weight: bold;
-            color: #000;
-            margin-bottom: 5px;
-        }
-        
-        .company-subtitle {
-            font-size: 13px;
-            color: #666;
-            margin-bottom: 15px;
-        }
-        
-        .document-info {
-            margin-top: 10px;
+        .logo-right {
+            position: absolute;
+            top: 15px;
+            right: 15px;
         }
         
         .document-title {
             font-size: 16px;
             font-weight: bold;
             text-decoration: underline;
-            margin-bottom: 5px;
+            margin: 10px 0 5px 0;
         }
         
         .document-number {
-            font-size: 14px;
+            font-size: 12px;
             font-weight: bold;
         }
         
-        /* Generation Info */
         .generation-info {
             text-align: right;
             margin-bottom: 20px;
             font-size: 11px;
-            color: #333;
+            border: 1px solid #000;
+            padding: 10px;
         }
         
-        .generation-info p {
-            margin-bottom: 3px;
-        }
-        
-        /* Dette Details Section */
-        .dette-section {
-            background-color: #f8f9fa;
-            border: 2px solid #dee2e6;
-            border-radius: 8px;
-            padding: 20px;
-            margin-bottom: 25px;
+        .section {
+            border: 2px solid #000;
+            margin-bottom: 20px;
+            break-inside: avoid;
         }
         
         .section-header {
-            font-size: 16px;
-            font-weight: bold;
-            color: #495057;
-            margin-bottom: 15px;
-            padding-bottom: 8px;
-            border-bottom: 1px solid #dee2e6;
-        }
-        
-        .status-badge {
-            padding: 4px 12px;
-            border-radius: 15px;
-            font-size: 11px;
-            font-weight: bold;
-            margin-left: 10px;
-        }
-        
-        .badge-active {
-            background-color: #dc3545;
-            color: white;
-        }
-        
-        .badge-completed {
-            background-color: #28a745;
-            color: white;
-        }
-        
-        /* Dette Details Grid */
-        .dette-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 15px;
-            margin-bottom: 20px;
-        }
-        
-        .dette-item {
-            background-color: white;
-            border: 1px solid #dee2e6;
-            border-radius: 5px;
-            padding: 12px;
-        }
-        
-        .dette-item-label {
-            font-size: 11px;
-            color: #666;
-            margin-bottom: 5px;
-            font-weight: normal;
-        }
-        
-        .dette-item-value {
+            background-color: #000;
+            color: #fff;
+            padding: 12px 15px;
             font-size: 14px;
             font-weight: bold;
-            color: #333;
+            text-align: center;
+            text-transform: uppercase;
+        }
+        
+        .section-content {
+            padding: 20px;
+        }
+        
+        .debt-summary {
+            text-align: center;
+            padding: 20px;
+            border: 3px solid #000;
+            margin-bottom: 30px;
+        }
+        
+        .debt-title {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            text-transform: uppercase;
+        }
+        
+        .summary-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        
+        .summary-table th,
+        .summary-table td {
+            border: 1px solid #000;
+            padding: 10px;
+            text-align: center;
+        }
+        
+        .summary-table th {
+            background-color: #000;
+            color: #fff;
+            font-weight: bold;
+        }
+        
+        .summary-table td {
+            font-weight: bold;
+            font-size: 14px;
+        }
+        
+        .info-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .info-table tr {
+            border-bottom: 1px solid #000;
+        }
+        
+        .info-table td {
+            padding: 12px 8px;
+            vertical-align: top;
+        }
+        
+        .info-table td:first-child {
+            font-weight: bold;
+            width: 35%;
+            border-right: 1px solid #000;
+        }
+        
+        .info-table td:last-child {
+            width: 65%;
+        }
+        
+        .badges {
+            margin-top: 20px;
+            text-align: center;
+        }
+        
+        .badge {
+            display: inline-block;
+            border: 2px solid #000;
+            padding: 5px 15px;
+            margin: 5px;
+            font-weight: bold;
+            text-transform: uppercase;
+            font-size: 10px;
+        }
+        
+        .empty-value {
+            font-style: italic;
+            color: #666;
+        }
+        
+        .amount-value {
+            font-weight: bold;
+            font-size: 14px;
         }
         
         .amount-original { color: #007bff; }
         .amount-paid { color: #28a745; }
         .amount-remaining { color: #dc3545; }
         
-        /* Progress Bar */
-        .progress-section {
-            grid-column: 1 / -1;
-            background-color: white;
-            border: 1px solid #dee2e6;
-            border-radius: 5px;
-            padding: 15px;
+        .progress-container {
+            margin: 20px 0;
+            text-align: center;
+        }
+        
+        .progress-label {
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 10px;
         }
         
         .progress-bar {
             width: 100%;
-            height: 25px;
+            height: 30px;
             background-color: #f8f9fa;
-            border-radius: 12px;
+            border: 2px solid #000;
             overflow: hidden;
-            border: 1px solid #dee2e6;
             margin-top: 8px;
         }
         
@@ -215,91 +244,31 @@
             align-items: center;
             justify-content: center;
             color: white;
-            font-size: 12px;
-            font-weight: bold;
-            transition: width 0.3s ease;
-        }
-        
-        /* Description */
-        .description-section {
-            grid-column: 1 / -1;
-            background-color: white;
-            border: 1px solid #dee2e6;
-            border-radius: 5px;
-            padding: 12px;
-            margin-top: 15px;
-        }
-        
-        .description-text {
-            font-style: italic;
-            color: #666;
-            margin-top: 5px;
-        }
-        
-        /* Summary Cards */
-        .summary-grid {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 15px;
-            margin-bottom: 25px;
-        }
-        
-        .summary-card {
-            background-color: white;
-            border: 1px solid #dee2e6;
-            border-radius: 5px;
-            padding: 15px;
-            text-align: center;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        }
-        
-        .summary-card-label {
-            font-size: 12px;
-            color: #666;
-            margin-bottom: 8px;
-        }
-        
-        .summary-card-value {
-            font-size: 16px;
-            font-weight: bold;
-        }
-        
-        /* Payments Table */
-        .payments-section {
-            margin-top: 25px;
-        }
-        
-        .payments-header {
-            background-color: #495057;
-            color: white;
-            padding: 12px;
             font-size: 14px;
             font-weight: bold;
-            margin-bottom: 0;
         }
         
         .payments-table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 20px;
-            background-color: white;
+            margin-top: 15px;
+            font-size: 9px;
         }
         
         .payments-table th,
         .payments-table td {
-            border: 1px solid #dee2e6;
-            padding: 8px 6px;
-            text-align: left;
-            vertical-align: top;
-            font-size: 10px;
+            border: 1px solid #000;
+            padding: 6px 4px;
+            text-align: center;
+            vertical-align: middle;
+            font-size: 9px;
         }
         
         .payments-table th {
-            background-color: #e9ecef;
+            background-color: #000;
+            color: #fff;
             font-weight: bold;
-            color: #495057;
-            text-align: center;
-            font-size: 11px;
+            font-size: 10px;
         }
         
         .payments-table tbody tr:nth-child(even) {
@@ -307,43 +276,33 @@
         }
         
         .payment-date {
+            font-weight: 500;
+            font-size: 9px;
             white-space: nowrap;
-            min-width: 70px;
         }
         
         .payment-amount {
             background-color: #28a745;
             color: white;
-            padding: 3px 6px;
-            border-radius: 3px;
+            padding: 2px 4px;
             font-weight: bold;
-            display: inline-block;
-            min-width: 85px;
-            text-align: center;
-            font-size: 10px;
+            font-size: 9px;
+            white-space: nowrap;
         }
         
         .payment-mode {
-            padding: 3px 8px;
-            border-radius: 3px;
-            font-size: 9px;
+            padding: 2px 4px;
+            font-size: 8px;
             font-weight: bold;
             text-transform: uppercase;
+            white-space: nowrap;
         }
         
-        .mode-especes {
-            background-color: #ffc107;
-            color: #856404;
-        }
-        
-        .mode-cheque {
-            background-color: #17a2b8;
-            color: white;
-        }
-        
-        .mode-virement {
-            background-color: #6f42c1;
-            color: white;
+        .payment-user {
+            font-size: 8px;
+            font-weight: 500;
+            word-break: break-word;
+            max-width: 80px;
         }
         
         .proof-exists {
@@ -355,84 +314,139 @@
             color: #dc3545;
         }
         
-        /* Total Row */
         .total-row {
-            border-top: 3px solid #495057;
+            border-top: 3px solid #000;
             background-color: #e9ecef;
         }
         
         .total-row td {
             font-weight: bold;
             font-size: 11px;
-            padding: 10px 6px;
+            padding: 12px 8px;
         }
         
-        /* No Payments */
         .no-payments {
             text-align: center;
-            padding: 40px 20px;
-            background-color: #f8f9fa;
-            border: 1px solid #dee2e6;
-            border-radius: 5px;
-            color: #666;
+            padding: 60px 20px;
+            border: 2px solid #000;
+            margin-top: 20px;
         }
         
-        .no-payments p {
-            margin-bottom: 10px;
-        }
-        
-        .no-payments strong {
-            color: #dc3545;
-        }
-        
-        /* Footer */
         .footer {
-            position: fixed;
-            bottom: 15mm;
-            left: 15mm;
-            right: 15mm;
-            border-top: 2px solid #495057;
-            padding-top: 15px;
-            background-color: white;
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            margin-top: auto;
+            padding: 10px 0;
+            border-top: 2px solid #000;
             font-size: 9px;
-            color: #666;
+            background-color: white;
+            page-break-inside: avoid;
         }
         
         .footer-content {
             display: flex;
             justify-content: space-between;
-            align-items: flex-start;
+            align-items: center;
         }
         
         .footer-info {
-            flex: 1;
-            margin-right: 15px;
+            flex-grow: 1;
         }
         
         .footer-info p {
-            margin-bottom: 3px;
+            margin: 2px 0;
             line-height: 1.3;
         }
         
-        .qr-section {
-            width: 70px;
-            height: 70px;
-            border: 1px solid #ddd;
-            background-color: #f9f9f9;
+        .qr-code {
+            width: 50px;
+            height: 50px;
+            border: 1px solid #000;
             display: flex;
             align-items: center;
             justify-content: center;
             flex-shrink: 0;
         }
         
-        .qr-section img {
+        .qr-code img {
             width: 100%;
             height: 100%;
             object-fit: contain;
         }
         
-        /* Print Optimization */
+        .two-column {
+            display: flex;
+            width: 100%;
+            margin-top: 10px;
+            gap: 15px;
+        }
+        
+        .column {
+            flex: 1;
+            width: calc(50% - 7.5px);
+        }
+        
+        .signature-box {
+            text-align: center;
+            border: 1px solid #000;
+            padding: 30px 15px;
+            margin-bottom: 20px;
+            height: 120px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            box-sizing: border-box;
+        }
+        
+        .signature-title {
+            margin: 0;
+            font-weight: bold;
+        }
+        
+        .signature-line {
+            border-top: 1px solid #000;
+            padding-top: 8px;
+            margin-top: auto;
+        }
+        
+        .signature-line p {
+            margin: 0;
+            font-size: 10px;
+        }
+        
+        /* Description section styling */
+        .description-content {
+            background-color: #f8f9fa;
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 4px;
+            font-size: 12px;
+            line-height: 1.6;
+            word-wrap: break-word;
+            white-space: pre-wrap;
+        }
+        
+        .description-content p {
+            margin: 0;
+            text-align: justify;
+        }
+        
         @media print {
+            .page {
+                page-break-after: always;
+                min-height: auto;
+            }
+            
+            .page:last-child {
+                page-break-after: avoid;
+            }
+            
+            .section {
+                break-inside: avoid;
+            }
+            
             body {
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
@@ -442,269 +456,354 @@
                 position: fixed;
                 bottom: 0;
             }
-            
-            .payments-table thead {
-                display: table-header-group;
-            }
-            
-            .payments-table tbody tr {
-                page-break-inside: avoid;
-            }
-        }
-        
-        /* Responsive adjustments */
-        @media (max-width: 800px) {
-            .dette-grid {
-                grid-template-columns: repeat(2, 1fr);
-            }
-            
-            .summary-grid {
-                grid-template-columns: repeat(2, 1fr);
-            }
-            
-            .header {
-                display: block;
-            }
-            
-            .logo-cell,
-            .company-cell {
-                display: block;
-                text-align: center;
-                margin-bottom: 15px;
-            }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <!-- Header -->
-        <div class="header">
-            <div class="header-row">
-                <div class="logo-cell">
-                    <div class="logo-box">LOGO</div>
-                </div>
-                <div class="company-cell">
-                    <div class="company-name">EURL E.C.H SAHRA</div>
-                    <div class="company-subtitle">Entreprise de Travaux de Construction Hydraulique et Génie Civil</div>
-                    <div class="document-info">
-                        <div class="document-title">{{ report_title }}</div>
-                        <div class="document-number">N° : {{ generation_date|date:"Y" }}/{{ generation_date|date:"m" }}/{{ generation_date|date:"d" }}-{{ generation_date|date:"His" }}</div>
-                    </div>
-                </div>
-                <div class="logo-cell">
-                    <div class="logo-box">LOGO</div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Generation Info -->
-        <div class="generation-info">
-            <p><strong>Ouargla le {{ generation_date|date:"d/m/Y" }}</strong></p>
-            <p><strong>Généré par:</strong> {{ generated_by.username }} - {{ generation_date|date:"d/m/Y à H:i" }}</p>
-        </div>
-        
-        <!-- Dette Details -->
-        <div class="dette-section">
-            <div class="section-header">
-                Détails de la Dette
-                <span class="status-badge {% if is_completed %}badge-completed{% else %}badge-active{% endif %}">
-                    {{ dette.status|upper }}
-                </span>
+    <!-- Page 1: Debt Summary and General Information -->
+    <div class="page">
+        <div class="page-content">
+            <div class="header">
+                <div class="logo-left">LOGO</div>
+                <div class="company-name">EURL E.C.H SAHRA</div>
+                <div class="company-subtitle">Entreprise de Travaux de Construction Hydraulique et Génie Civil</div>
+                <div class="document-title">{{ report_title }}</div>
+                <div class="document-number">N° : {{ generation_date|date:"Y" }}/{{ generation_date|date:"m" }}/{{ generation_date|date:"d" }}-{{ generation_date|date:"His" }}</div>
+                <div class="logo-right">LOGO</div>
             </div>
             
-            <div class="dette-grid">
-                <div class="dette-item">
-                    <div class="dette-item-label">Créancier</div>
-                    <div class="dette-item-value">{{ dette.creditor_name }}</div>
-                </div>
-                
-                <div class="dette-item">
-                    <div class="dette-item-label">Date de Création</div>
-                    <div class="dette-item-value">{{ dette.date_created|date:"d/m/Y à H:i" }}</div>
-                </div>
-                
-                <div class="dette-item">
-                    <div class="dette-item-label">Montant Original</div>
-                    <div class="dette-item-value amount-original">{{ dette.original_amount|floatformat:2 }} DZD</div>
-                </div>
-                
-                <div class="dette-item">
-                    <div class="dette-item-label">Montant Payé</div>
-                    <div class="dette-item-value amount-paid">{{ total_paid|floatformat:2 }} DZD</div>
-                </div>
-                
-                <div class="dette-item">
-                    <div class="dette-item-label">Montant Restant</div>
-                    <div class="dette-item-value amount-remaining">{{ remaining_amount|floatformat:2 }} DZD</div>
-                </div>
-                
-                <div class="dette-item">
-                    <div class="dette-item-label">Nombre de Paiements</div>
-                    <div class="dette-item-value">{{ payment_count }} paiement(s)</div>
-                </div>
-                
-                {% if dette.project %}
-                <div class="dette-item">
-                    <div class="dette-item-label">Projet Associé</div>
-                    <div class="dette-item-value">{{ dette.project.name }}</div>
-                </div>
-                {% endif %}
-                
-                {% if dette.completed_at %}
-                <div class="dette-item">
-                    <div class="dette-item-label">Date de Completion</div>
-                    <div class="dette-item-value">{{ dette.completed_at|date:"d/m/Y à H:i" }}</div>
-                </div>
-                {% endif %}
-                
-                <!-- Progress Bar -->
-                <div class="progress-section">
-                    <div class="dette-item-label">Progression du Paiement</div>
-                    <div class="progress-bar">
-                        <div class="progress-fill" style="width: {{ completion_percentage|floatformat:1 }}%;">
-                            {{ completion_percentage|floatformat:1 }}%
-                        </div>
-                    </div>
-                </div>
-                
-                {% if dette.description %}
-                <div class="description-section">
-                    <div class="dette-item-label">Description</div>
-                    <div class="description-text">{{ dette.description }}</div>
-                </div>
-                {% endif %}
+            <div class="generation-info">
+                <p><strong>Ouargla, le {{ generation_date|date:"d/m/Y" }}</strong></p>
+                <p><strong>Généré par:</strong> {{ generated_by.username }} - {{ generation_date|date:"d/m/Y à H:i" }}</p>
             </div>
-        </div>
-        
-        <!-- Summary Cards -->
-        <div class="summary-grid">
-            <div class="summary-card">
-                <div class="summary-card-label">Montant Original</div>
-                <div class="summary-card-value amount-original">{{ dette.original_amount|floatformat:2 }} DZD</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-card-label">Total Payé</div>
-                <div class="summary-card-value amount-paid">{{ total_paid|floatformat:2 }} DZD</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-card-label">Montant Restant</div>
-                <div class="summary-card-value amount-remaining">{{ remaining_amount|floatformat:2 }} DZD</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-card-label">Nombre de Paiements</div>
-                <div class="summary-card-value">{{ payment_count }}</div>
-            </div>
-        </div>
-        
-        <!-- Payments Section -->
-        <div class="payments-section">
-            <div class="payments-header">Historique des Paiements</div>
             
-            {% if payments %}
-                <table class="payments-table">
+            <div class="debt-summary">
+                <div class="debt-title">Dette N° {{ dette.id }} - {{ dette.creditor_name }}</div>
+                
+                <table class="summary-table">
                     <thead>
                         <tr>
-                            <th>Date</th>
-                            <th>Montant Payé</th>
-                            <th>Mode de Paiement</th>
-                            {% if has_cheque %}
-                            <th>N° Chèque</th>
-                            {% endif %}
-                            <th>Nom Fournisseur</th>
-                            {% if has_virement %}
-                            <th>Banque</th>
-                            {% endif %}
-                            <th>Description</th>
-                            <th>Payé par</th>
-                            <th>Preuve</th>
+                            <th>Montant Original</th>
+                            <th>Total Payé</th>
+                            <th>Montant Restant</th>
+                            <th>Statut</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {% for payment in payments %}
                         <tr>
-                            <td class="payment-date">
-                                {{ payment.payment_date|date:"d/m/Y" }}<br>
-                                <small>{{ payment.payment_date|date:"H:i" }}</small>
-                            </td>
-                            <td>
-                                <span class="payment-amount">{{ payment.amount_paid|floatformat:2 }} DZD</span>
-                            </td>
-                            <td>
-                                <span class="payment-mode mode-{{ payment.mode_paiement }}">
-                                    {{ payment.get_mode_paiement_display|upper }}
-                                </span>
-                            </td>
-                            {% if has_cheque %}
-                            <td>
-                                {% if payment.mode_paiement == 'cheque' %}
-                                    {{ payment.numero_cheque|default:"-" }}
-                                {% else %}
-                                    -
-                                {% endif %}
-                            </td>
-                            {% endif %}
-                            <td>{{ payment.nom_fournisseur|default:"-" }}</td>
-                            {% if has_virement %}
-                            <td>
-                                {% if payment.mode_paiement == 'virement' %}
-                                    {{ payment.banque|default:"-" }}
-                                {% else %}
-                                    -
-                                {% endif %}
-                            </td>
-                            {% endif %}
-                            <td>{{ payment.description|default:"-" }}</td>
-                            <td>
-                                {% if payment.created_by %}
-                                    {{ payment.created_by.username }}
-                                {% else %}
-                                    -
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if payment.preuve_file %}
-                                    <span class="proof-exists">Oui</span>
-                                {% else %}
-                                    <span class="proof-none">Non</span>
-                                {% endif %}
-                            </td>
-                        </tr>
-                        {% endfor %}
-                        
-                        <!-- Total Row -->
-                        <tr class="total-row">
-                            <td><strong>TOTAL</strong></td>
-                            <td><span class="payment-amount">{{ total_paid|floatformat:2 }} DZD</span></td>
-                            <td colspan="{% if has_cheque and has_virement %}6{% elif has_cheque or has_virement %}5{% else %}4{% endif %}">
-                                <strong>{{ payment_count }} paiement(s) | Restant: {{ remaining_amount|floatformat:2 }} DZD</strong>
-                            </td>
+                            <td class="amount-original">{{ dette.original_amount|floatformat:2 }} DZD</td>
+                            <td class="amount-paid">{{ total_paid|floatformat:2 }} DZD</td>
+                            <td class="amount-remaining">{{ remaining_amount|floatformat:2 }} DZD</td>
+                            <td>{% if is_completed %}TERMINÉ{% else %}ACTIF{% endif %}</td>
                         </tr>
                     </tbody>
                 </table>
-            {% else %}
-                <div class="no-payments">
-                    <p>Aucun paiement enregistré pour cette dette.</p>
-                    <p>Montant total à payer : <strong>{{ dette.original_amount|floatformat:2 }} DZD</strong></p>
+            </div>
+            
+            <div class="section">
+                <div class="section-header">Informations Générales</div>
+                <div class="section-content">
+                    <table class="info-table">
+                        <tr>
+                            <td>Créancier</td>
+                            <td><strong>{{ dette.creditor_name }}</strong></td>
+                        </tr>
+                        <tr>
+                            <td>Date de Création</td>
+                            <td>{{ dette.date_created|date:"d/m/Y à H:i" }}</td>
+                        </tr>
+                        <tr>
+                            <td>Statut de la Dette</td>
+                            <td><strong>{{ dette.status|upper }}</strong></td>
+                        </tr>
+                        {% if dette.completed_at %}
+                        <tr>
+                            <td>Date de Completion</td>
+                            <td>{{ dette.completed_at|date:"d/m/Y à H:i" }}</td>
+                        </tr>
+                        {% endif %}
+                        {% if dette.project %}
+                        <tr>
+                            <td>Projet Associé</td>
+                            <td><strong>{{ dette.project.name }}</strong></td>
+                        </tr>
+                        {% endif %}
+                        <tr>
+                            <td>Nombre de Paiements</td>
+                            <td><strong>{{ payment_count }}</strong></td>
+                        </tr>
+                        <tr>
+                            <td>Document Généré par</td>
+                            <td>{{ generated_by.username }} - {{ generation_date|date:"d/m/Y à H:i" }}</td>
+                        </tr>
+                    </table>
+                    
+                    <div class="progress-container">
+                        <div class="progress-label">Progression du Paiement</div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: {{ completion_percentage|floatformat:1 }}%;">
+                                {{ completion_percentage|floatformat:1 }}%
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="badges">
+                        {% if is_completed %}
+                        <span class="badge">Terminé</span>
+                        {% else %}
+                        <span class="badge">Actif</span>
+                        {% endif %}
+                        {% if dette.project %}
+                        <span class="badge">Projet Associé</span>
+                        {% endif %}
+                    </div>
                 </div>
+            </div>
+            
+            {% if dette.description %}
+            <div class="section">
+                <div class="section-header">Description de la Dette</div>
+                <div class="section-content">
+                    <div class="description-content">
+                        <p>{{ dette.description }}</p>
+                    </div>
+                </div>
+            </div>
             {% endif %}
         </div>
-    </div>
-    
-    <!-- Footer -->
-    <div class="footer">
-        <div class="footer-content">
-            <div class="footer-info">
-                <p><strong>Entreprise au Capital Social de :</strong> 26.000.000.00 DA / RC : 30/ 00-0126507 B 22, NIF : 002230012650738, Art : 30010149062 RIB : AGB 032 003002875121208 86</p>
-                <p><strong>Adresse :</strong> Local 100 Bt 06 Q, Cité Ennasr, Nouvelle Bamendile Ouargla, Tél/Fax : 029 60 93 13. Email : echsahra@gmail.com</p>
-                <p>Journal de Dette généré le {{ generation_date|date:"d/m/Y à H:i" }} par {{ generated_by.username }} - EURL E.C.H SAHRA - Système de Gestion ERP</p>
-                <p><strong>Dette ID:</strong> {{ dette.id }} - <strong>Créancier:</strong> {{ dette.creditor_name }} - <strong>Statut:</strong> {{ dette.status|upper }}</p>
+        
+        <div class="footer">
+            <div class="footer-content">
+                <div class="footer-info">
+                    <p><strong>Capital Social:</strong> 26.000.000.00 DA | <strong>RC:</strong> 30/00-0126507 B 22</p>
+                    <p><strong>NIF:</strong> 002230012650738 | <strong>Art:</strong> 30010149062</p>
+                    <p><strong>RIB:</strong> AGB 032 003002875121208 86</p>
+                    <p><strong>Adresse:</strong> Local 100 Bt 06 Q, Cité Ennasr, Nouvelle Bamendile Ouargla</p>
+                    <p><strong>Contact:</strong> Tél/Fax: 029 60 93 13 | Email: echsahra@gmail.com</p>
+                </div>
+                <div class="qr-code">
+                    {% if qr_code_base64 %}
+                    <img src="data:image/png;base64,{{ qr_code_base64 }}" alt="QR Code">
+                    {% else %}
+                    <span style="font-size: 8px;">QR</span>
+                    {% endif %}
+                </div>
             </div>
-            <div class="qr-section">
-                {% if qr_code_base64 %}
-                <img src="data:image/png;base64,{{ qr_code_base64 }}" alt="QR Code">
-                {% else %}
-                <span style="font-size: 8px; color: #999;">QR CODE</span>
-                {% endif %}
+        </div>
+    </div>
+
+    <!-- Page 2: Payment History -->
+    <div class="page">
+        <div class="page-content">
+            <div class="header">
+                <div class="company-name">EURL E.C.H SAHRA</div>
+                <div class="company-subtitle">Entreprise de Travaux de Construction Hydraulique et Génie Civil</div>
+                <div class="document-title">{{ report_title }} - Historique des Paiements</div>
+                <div class="document-number">N° : {{ generation_date|date:"Y" }}/{{ generation_date|date:"m" }}/{{ generation_date|date:"d" }}-{{ generation_date|date:"His" }}</div>
+            </div>
+            
+            <div class="debt-summary">
+                <div class="debt-title">Historique des Paiements - {{ dette.creditor_name }}</div>
+            </div>
+            
+            <div class="section">
+                <div class="section-header">Détails des Paiements</div>
+                <div class="section-content">
+                    {% if payments %}
+                        <table class="payments-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 10%;">Date</th>
+                                    <th style="width: 12%;">Montant</th>
+                                    <th style="width: 10%;">Mode</th>
+                                    <th style="width: 10%;">N° Chèque</th>
+                                    <th style="width: 12%;">Fournisseur</th>
+                                    <th style="width: 10%;">Banque</th>
+                                    <th style="width: 15%;">Description</th>
+                                    <th style="width: 12%;">Par</th>
+                                    <th style="width: 9%;">Preuve</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for payment in payments %}
+                                <tr>
+                                    <td class="payment-date">
+                                        {{ payment.payment_date|date:"d/m/Y" }}
+                                    </td>
+                                    <td>
+                                        <span class="payment-amount">{{ payment.amount_paid|floatformat:2 }}</span>
+                                    </td>
+                                    <td>
+                                        <span class="payment-mode">
+                                            {{ payment.get_mode_paiement_display|upper }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        {{ payment.numero_cheque|default:"-" }}
+                                    </td>
+                                    <td>{{ payment.nom_fournisseur|default:"-"|truncatechars:15 }}</td>
+                                    <td>
+                                        {{ payment.banque|default:"-"|truncatechars:12 }}
+                                    </td>
+                                    <td>{{ payment.description|default:"-"|truncatechars:18 }}</td>
+                                    <td class="payment-user">
+                                        {% if payment.created_by %}
+                                            {{ payment.created_by.username }}
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if payment.preuve_file %}
+                                            <span class="proof-exists">OUI</span>
+                                        {% else %}
+                                            <span class="proof-none">NON</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                                
+                                <tr class="total-row">
+                                    <td><strong>TOTAL</strong></td>
+                                    <td><span class="payment-amount">{{ total_paid|floatformat:2 }}</span></td>
+                                    <td colspan="7">
+                                        <strong>{{ payment_count }} paiement(s) | Restant: {{ remaining_amount|floatformat:2 }} DZD</strong>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    {% else %}
+                        <div class="no-payments">
+                            <p><strong>Aucun paiement enregistré pour cette dette.</strong></p>
+                            <p>Montant total à payer : <strong>{{ dette.original_amount|floatformat:2 }} DZD</strong></p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <div class="footer-content">
+                <div class="footer-info">
+                    <p><strong>Capital Social:</strong> 26.000.000.00 DA | <strong>RC:</strong> 30/00-0126507 B 22</p>
+                    <p><strong>NIF:</strong> 002230012650738 | <strong>Art:</strong> 30010149062</p>
+                    <p><strong>RIB:</strong> AGB 032 003002875121208 86</p>
+                    <p><strong>Adresse:</strong> Local 100 Bt 06 Q, Cité Ennasr, Nouvelle Bamendile Ouargla</p>
+                    <p><strong>Contact:</strong> Tél/Fax: 029 60 93 13 | Email: echsahra@gmail.com</p>
+                </div>
+                <div class="qr-code">
+                    {% if qr_code_base64 %}
+                    <img src="data:image/png;base64,{{ qr_code_base64 }}" alt="QR Code">
+                    {% else %}
+                    <span style="font-size: 8px;">QR</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Page 3: Summary and Signatures -->
+    <div class="page">
+        <div class="page-content">
+            <div class="header">
+                <div class="company-name">EURL E.C.H SAHRA</div>
+                <div class="company-subtitle">Entreprise de Travaux de Construction Hydraulique et Génie Civil</div>
+                <div class="document-title">{{ report_title }} - Résumé Final</div>
+                <div class="document-number">N° : {{ generation_date|date:"Y" }}/{{ generation_date|date:"m" }}/{{ generation_date|date:"d" }}-{{ generation_date|date:"His" }}</div>
+            </div>
+            
+            <div class="section">
+                <div class="section-header">Résumé de la Dette</div>
+                <div class="section-content">
+                    <table class="info-table">
+                        <tr>
+                            <td>ID de la Dette</td>
+                            <td><strong>{{ dette.id }}</strong></td>
+                        </tr>
+                        <tr>
+                            <td>Créancier</td>
+                            <td><strong>{{ dette.creditor_name }}</strong></td>
+                        </tr>
+                        <tr>
+                            <td>Date de Création</td>
+                            <td><strong>{{ dette.date_created|date:"d/m/Y" }}</strong></td>
+                        </tr>
+                        <tr>
+                            <td>Montant Original</td>
+                            <td class="amount-value amount-original">{{ dette.original_amount|floatformat:2 }} DZD</td>
+                        </tr>
+                        <tr>
+                            <td>Total Payé</td>
+                            <td class="amount-value amount-paid">{{ total_paid|floatformat:2 }} DZD</td>
+                        </tr>
+                        <tr>
+                            <td>Montant Restant</td>
+                            <td class="amount-value amount-remaining">{{ remaining_amount|floatformat:2 }} DZD</td>
+                        </tr>
+                        <tr>
+                            <td>Statut Final</td>
+                            <td>
+                                <strong>{% if is_completed %}TERMINÉ{% else %}ACTIF{% endif %}</strong>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Pourcentage d'Achèvement</td>
+                            <td class="amount-value">{{ completion_percentage|floatformat:1 }}%</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-header">Signatures et Validations</div>
+                <div class="section-content">
+                    <div class="two-column">
+                        <div class="column">
+                            <div class="signature-box">
+                                <p class="signature-title">Responsable Financier</p>
+                                <div class="signature-line">
+                                    <p>Signature et Cachet</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="column">
+                            <div class="signature-box">
+                                <p class="signature-title">Directeur Général</p>
+                                <div class="signature-line">
+                                    <p>Signature et Cachet</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div style="text-align: center; margin-top: 30px; border: 2px solid #000; padding: 15px;">
+                        <p style="margin: 0; font-size: 11px;">
+                            <strong>Document généré automatiquement par le système de gestion EURL E.C.H SAHRA</strong>
+                        </p>
+                        <p style="margin: 5px 0 0 0; font-size: 10px;">
+                            Généré le {{ generation_date|date:"d/m/Y à H:i" }} par {{ generated_by.username }}
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <div class="footer-content">
+                <div class="footer-info">
+                    <p><strong>Capital Social:</strong> 26.000.000.00 DA | <strong>RC:</strong> 30/00-0126507 B 22</p>
+                    <p><strong>NIF:</strong> 002230012650738 | <strong>Art:</strong> 30010149062</p>
+                    <p><strong>RIB:</strong> AGB 032 003002875121208 86</p>
+                    <p><strong>Adresse:</strong> Local 100 Bt 06 Q, Cité Ennasr, Nouvelle Bamendile Ouargla</p>
+                    <p><strong>Contact:</strong> Tél/Fax: 029 60 93 13 | Email: echsahra@gmail.com</p>
+                </div>
+                <div class="qr-code">
+                    {% if qr_code_base64 %}
+                    <img src="data:image/png;base64,{{ qr_code_base64 }}" alt="QR Code">
+                    {% else %}
+                    <span style="font-size: 8px;">QR</span>
+                    {% endif %}
+                </div>
             </div>
         </div>
     </div>

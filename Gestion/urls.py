@@ -25,12 +25,23 @@ urlpatterns = [
     
     path('bon-livraison/', views.bon_livraison_list, name='bon_livraison_list'),
     path('bon-livraison/create/', views.create_bon_livraison, name='create_bon_livraison'),
+    path('bon-livraison/<int:bon_id>/pdf/', views.generate_bon_livraison_pdf, name='generate_bon_commande_pdf'),
+    path('bon-livraison/<int:bon_id>/delete/', views.delete_bon_livraison, name='bon_livraison_detail'),
+    path('bon-livraison/<int:bon_id>/update/', views.update_bon_livraison, name='update_bon_livraison'),
+    
     
     path('bon-commande/', views.bon_commande_list, name='bon_commande_list'),
     path('bon-commande/create/', views.create_bon_commande, name='create_bon_commande'),
+    path('bon-commande/<int:bc_id>/update/', views.update_bon_commande, name='update_bon_commande'),
+    path('bon-commande/<int:bc_id>/delete/',views.delete_bon_commande, name='delete_bon_commande'),
+    path('bon-commande/<int:bc_id>/pdf/', views.generate_and_download_pdf, name='generate_bon_commande_pdf'),
     
     path('ordre-mission/', views.ordre_mission_list, name='ordre_mission_list'),
     path('ordre-mission/create/', views.create_ordre_mission, name='create_ordre_mission'),
+    path('ordre-mission/<int:mission_id>/update/', views.update_ordre_mission, name='update_ordre_mission'),
+    path('ordre-mission/<int:mission_id>/delete/', views.delete_ordre_mission, name='delete_ordre_mission'),
+    path('ordre-mission/<int:mission_id>/', views.get_ordre_mission, name='ordre_mission_detail'),
+    path('ordre-mission/<int:mission_id>/pdf/', views.download_ordre_mission_pdf_weasy, name='generate_ordre_mission_pdf'),
     
     path('dashboard/', views.dashboard_stats, name='dashboard_stats'),
 

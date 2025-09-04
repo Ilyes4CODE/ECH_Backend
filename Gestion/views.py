@@ -10,8 +10,11 @@ from decimal import Decimal
 from .models import (
     GlobalCaisse, CaisseOperation, Project,
     Dette, DettePayment, CaisseHistory, BonDeLivraison,
-    BonDeCommande, OrdreDeMission, Product,Revenu
+    BonDeCommande, OrdreDeMission, Product,Revenu,AdditionalCharge,BonDeLivraisonItem,BonDeCommandeItem
 )
+import os
+from django.conf import settings
+from django.core.files.base import ContentFile
 import io
 from django.template.loader import get_template
 from django.utils import timezone
@@ -22,7 +25,7 @@ import base64
 from weasyprint import HTML, CSS
 from weasyprint.text.fonts import FontConfiguration
 from PIL import Image
-from django.http import HttpResponse
+from django.http import HttpResponse,Http404
 from django.template.loader import render_to_string
 from django.utils.dateparse import parse_datetime, parse_date
 from django.contrib.auth.models import User
@@ -1182,28 +1185,396 @@ def caisse_history(request):
 def create_bon_livraison(request):
     data = request.data
     
-    project = get_object_or_404(Project, id=data['project_id'])
+    try:
+        with transaction.atomic():
+            # Get the project
+            project = get_object_or_404(Project, id=data['project_id'])
+            
+            # Create the bon de livraison
+            bon_livraison = BonDeLivraison.objects.create(
+                project=project,
+                origin_address=data['origin_address'],
+                destination_address=data['destination_address'],
+                description=data.get('description', ''),
+                payment_method=data['payment_method'],
+                payment_proof=data.get('payment_proof'),
+                nom_fournisseur=data.get('nom_fournisseur'),
+                banque=data.get('banque'),
+                numero_cheque=data.get('numero_cheque'),
+                created_by=request.user
+            )
+            
+            # Handle items
+            items_data = data.get('items', [])
+            for item_data in items_data:
+                # Get or create product
+                product = None
+                if 'product_id' in item_data and item_data['product_id']:
+                    # Product ID provided, get existing product
+                    try:
+                        product = Product.objects.get(id=item_data['product_id'])
+                    except Product.DoesNotExist:
+                        return Response({
+                            'error': f'Product with ID {item_data["product_id"]} does not exist'
+                        }, status=status.HTTP_400_BAD_REQUEST)
+                
+                elif 'product_name' in item_data:
+                    # Product name provided, get or create product
+                    product_name = item_data['product_name'].strip()
+                    if not product_name:
+                        return Response({
+                            'error': 'Product name cannot be empty'
+                        }, status=status.HTTP_400_BAD_REQUEST)
+                    
+                    product, created = Product.objects.get_or_create(
+                        name=product_name,
+                        defaults={
+                            'description': item_data.get('product_description', ''),
+                            # Add other default fields as needed based on your Product model
+                        }
+                    )
+                else:
+                    return Response({
+                        'error': 'Either product_id or product_name must be provided for each item'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                
+                # Validate required fields
+                if 'quantity' not in item_data or not item_data['quantity']:
+                    return Response({
+                        'error': 'Quantity is required for each item'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                
+                quantity = int(item_data['quantity'])
+                if quantity <= 0:
+                    return Response({
+                        'error': 'Quantity must be greater than 0'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                
+                # Create the bon de livraison item
+                unit_price = None
+                total_price = None
+                
+                if 'unit_price' in item_data and item_data['unit_price']:
+                    unit_price = Decimal(str(item_data['unit_price']))
+                
+                if 'total_price' in item_data and item_data['total_price']:
+                    total_price = Decimal(str(item_data['total_price']))
+                
+                BonDeLivraisonItem.objects.create(
+                    bon_de_livraison=bon_livraison,
+                    product=product,
+                    quantity=quantity,
+                    unit_price=unit_price,
+                    total_price=total_price
+                )
+            
+            # Handle additional charges
+            charges_data = data.get('additional_charges', [])
+            for charge_data in charges_data:
+                if 'description' not in charge_data or 'amount' not in charge_data:
+                    return Response({
+                        'error': 'Description and amount are required for additional charges'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                
+                AdditionalCharge.objects.create(
+                    bon_de_livraison=bon_livraison,
+                    description=charge_data['description'],
+                    amount=Decimal(str(charge_data['amount']))
+                )
+            
+            # The total will be automatically calculated due to the save method override
+            bon_livraison.save()
+            
+            return Response({
+                'message': 'Bon de livraison créé avec succès',
+                'bl_id': bon_livraison.id,
+                'bl_number': bon_livraison.bl_number,
+                'total_amount': bon_livraison.total_amount
+            }, status=status.HTTP_201_CREATED)
     
-    bon_livraison = BonDeLivraison.objects.create(
-        project=project,
-        origin_address=data['origin_address'],
-        destination_address=data['destination_address'],
-        description=data.get('description', ''),
-        payment_method=data['payment_method'],
-        payment_proof=data.get('payment_proof'),
-        nom_fournisseur=data.get('nom_fournisseur'),
-        banque=data.get('banque'),
-        numero_cheque=data.get('numero_cheque'),
-        created_by=request.user
-    )
-    
-    return Response({
-        'message': 'Bon de livraison créé avec succès',
-        'bl_id': bon_livraison.id,
-        'bl_number': bon_livraison.bl_number
-    }, status=status.HTTP_201_CREATED)
+    except ValueError as e:
+        return Response({
+            'error': f'Invalid data format: {str(e)}'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response({
+            'error': f'An error occurred: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+@api_view(['PUT'])
+@permission_classes([IsAuthenticated])
+def update_bon_livraison(request, bon_id):
+    data = request.data
+    
+    try:
+        with transaction.atomic():
+            # Get the bon de livraison
+            bon_livraison = get_object_or_404(BonDeLivraison, id=bon_id)
+            
+            # Check if user has permission to update (optional - adjust based on your business logic)
+            # You might want to check if the user is the creator or has appropriate permissions
+            
+            # Update basic fields
+            if 'origin_address' in data:
+                bon_livraison.origin_address = data['origin_address']
+            if 'destination_address' in data:
+                bon_livraison.destination_address = data['destination_address']
+            if 'description' in data:
+                bon_livraison.description = data['description']
+            if 'payment_method' in data:
+                bon_livraison.payment_method = data['payment_method']
+            if 'payment_proof' in data:
+                bon_livraison.payment_proof = data['payment_proof']
+            if 'nom_fournisseur' in data:
+                bon_livraison.nom_fournisseur = data['nom_fournisseur']
+            if 'banque' in data:
+                bon_livraison.banque = data['banque']
+            if 'numero_cheque' in data:
+                bon_livraison.numero_cheque = data['numero_cheque']
+            
+            # Handle items update
+            if 'items' in data:
+                # Delete existing items
+                BonDeLivraisonItem.objects.filter(bon_de_livraison=bon_livraison).delete()
+                
+                # Create new items
+                items_data = data['items']
+                for item_data in items_data:
+                    # Get or create product (same logic as create function)
+                    product = None
+                    if 'product_id' in item_data and item_data['product_id']:
+                        try:
+                            product = Product.objects.get(id=item_data['product_id'])
+                        except Product.DoesNotExist:
+                            return Response({
+                                'error': f'Product with ID {item_data["product_id"]} does not exist'
+                            }, status=status.HTTP_400_BAD_REQUEST)
+                    
+                    elif 'product_name' in item_data:
+                        product_name = item_data['product_name'].strip()
+                        if not product_name:
+                            return Response({
+                                'error': 'Product name cannot be empty'
+                            }, status=status.HTTP_400_BAD_REQUEST)
+                        
+                        product, created = Product.objects.get_or_create(
+                            name=product_name,
+                            defaults={
+                                'description': item_data.get('product_description', ''),
+                            }
+                        )
+                    else:
+                        return Response({
+                            'error': 'Either product_id or product_name must be provided for each item'
+                        }, status=status.HTTP_400_BAD_REQUEST)
+                    
+                    # Validate required fields
+                    if 'quantity' not in item_data or not item_data['quantity']:
+                        return Response({
+                            'error': 'Quantity is required for each item'
+                        }, status=status.HTTP_400_BAD_REQUEST)
+                    
+                    quantity = int(item_data['quantity'])
+                    if quantity <= 0:
+                        return Response({
+                            'error': 'Quantity must be greater than 0'
+                        }, status=status.HTTP_400_BAD_REQUEST)
+                    
+                    # Create the updated bon de livraison item
+                    unit_price = None
+                    total_price = None
+                    
+                    if 'unit_price' in item_data and item_data['unit_price']:
+                        unit_price = Decimal(str(item_data['unit_price']))
+                    
+                    if 'total_price' in item_data and item_data['total_price']:
+                        total_price = Decimal(str(item_data['total_price']))
+                    
+                    BonDeLivraisonItem.objects.create(
+                        bon_de_livraison=bon_livraison,
+                        product=product,
+                        quantity=quantity,
+                        unit_price=unit_price,
+                        total_price=total_price
+                    )
+            
+            # Handle additional charges update
+            if 'additional_charges' in data:
+                # Delete existing additional charges
+                AdditionalCharge.objects.filter(bon_de_livraison=bon_livraison).delete()
+                
+                # Create new additional charges
+                charges_data = data['additional_charges']
+                for charge_data in charges_data:
+                    if 'description' not in charge_data or 'amount' not in charge_data:
+                        return Response({
+                            'error': 'Description and amount are required for additional charges'
+                        }, status=status.HTTP_400_BAD_REQUEST)
+                    
+                    AdditionalCharge.objects.create(
+                        bon_de_livraison=bon_livraison,
+                        description=charge_data['description'],
+                        amount=Decimal(str(charge_data['amount']))
+                    )
+            
+            # Save the updated bon de livraison (will recalculate total)
+            bon_livraison.save()
+            
+            return Response({
+                'message': 'Bon de livraison mis à jour avec succès',
+                'bl_id': bon_livraison.id,
+                'bl_number': bon_livraison.bl_number,
+                'total_amount': bon_livraison.total_amount
+            }, status=status.HTTP_200_OK)
+    
+    except ValueError as e:
+        return Response({
+            'error': f'Invalid data format: {str(e)}'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response({
+            'error': f'An error occurred: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_bon_livraison(request, bon_id):
+    try:
+        with transaction.atomic():
+            # Get the bon de livraison
+            bon_livraison = get_object_or_404(BonDeLivraison, id=bon_id)
+            
+            # Check if user has permission to delete (optional - adjust based on your business logic)
+            # You might want to check if the user is the creator or has appropriate permissions
+            # Example:
+            # if bon_livraison.created_by != request.user:
+            #     return Response({
+            #         'error': 'You do not have permission to delete this bon de livraison'
+            #     }, status=status.HTTP_403_FORBIDDEN)
+            
+            # Store info before deletion
+            bl_number = bon_livraison.bl_number
+            
+            # Delete the bon de livraison (related items and charges will be deleted due to CASCADE)
+            bon_livraison.delete()
+            
+            return Response({
+                'message': f'Bon de livraison {bl_number} supprimé avec succès'
+            }, status=status.HTTP_200_OK)
+    
+    except Exception as e:
+        return Response({
+            'error': f'An error occurred: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def generate_bon_livraison_pdf(request, bon_id):
+    """
+    Generate PDF for Bon de Livraison with QR code
+    Includes BL items and additional charges if any
+    """
+    try:
+        # Get the Bon de Livraison object with related data
+        bon = get_object_or_404(
+            BonDeLivraison.objects.select_related(
+                'project', 
+                'created_by', 
+                'pdf_generated_by'
+            ).prefetch_related(
+                'items__product',
+                'additional_charges'
+            ), 
+            id=bon_id
+        )
+        
+        # Generate QR Code data
+        qr_code_data = f"""Bon de Livraison: {bon.bl_number}
+Projet: {bon.project.name}
+Date: {bon.created_at.strftime('%d/%m/%Y')}
+Créé par: {bon.created_by.get_full_name() if bon.created_by else 'N/A'}"""
+        
+        # Create QR code
+        qr = qrcode.QRCode(
+            version=1,
+            error_correction=qrcode.constants.ERROR_CORRECT_L,
+            box_size=10,
+            border=4,
+        )
+        qr.add_data(qr_code_data)
+        qr.make(fit=True)
+        
+        # Create QR code image and convert to base64
+        qr_img = qr.make_image(fill_color="black", back_color="white")
+        buffer = BytesIO()
+        qr_img.save(buffer, format='PNG')
+        qr_code_base64 = base64.b64encode(buffer.getvalue()).decode()
+        qr_code_url = f"data:image/png;base64,{qr_code_base64}"
+        
+        # Prepare context for template
+        context = {
+            'bon': bon,
+            'qr_code_url': qr_code_url,
+        }
+        
+        # Render HTML template
+        html_string = render_to_string('BL/pdf_template.html', context)
+        
+        # CSS for PDF generation
+        css_string = """
+        @page {
+            size: A4;
+            margin: 1cm;
+        }
+        
+        body {
+            font-family: 'DejaVu Sans', Arial, sans-serif;
+        }
+        
+        .container {
+            max-width: none;
+            margin: 0;
+            padding: 0;
+        }
+        """
+        
+        # Generate PDF using WeasyPrint
+        font_config = FontConfiguration()
+        html_doc = HTML(string=html_string)
+        css_doc = CSS(string=css_string)
+        pdf = html_doc.write_pdf(stylesheets=[css_doc], font_config=font_config)
+        
+        # Update the BonDeLivraison record
+        bon.pdf_generated_by = request.user
+        bon.pdf_generated_at = timezone.now()
+        
+        # Save PDF file to model
+        pdf_filename = bon.get_pdf_filename()
+        pdf_content = ContentFile(pdf)
+        pdf_content.name = pdf_filename
+        
+        bon.pdf_file.save(pdf_filename, pdf_content, save=False)
+        bon.save(update_fields=['pdf_generated_by', 'pdf_generated_at', 'pdf_file'])
+        
+        # Return PDF response
+        response = HttpResponse(pdf, content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="{pdf_filename}"'
+        
+        return response
+        
+    except BonDeLivraison.DoesNotExist:
+        return Response(
+            {'error': 'Bon de Livraison not found'}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
+    except Exception as e:
+        return Response(
+            {'error': f'Error generating PDF: {str(e)}'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -1310,7 +1681,7 @@ def generate_operation_pdf(request, history_id):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def bon_livraison_list(request):
-    bons = BonDeLivraison.objects.all()
+    bons = BonDeLivraison.objects.prefetch_related('items__product', 'additional_charges').all()
     
     project_id = request.GET.get('project_id')
     if project_id:
@@ -1318,6 +1689,27 @@ def bon_livraison_list(request):
     
     bons_data = []
     for bon in bons:
+        # Get items data
+        items_data = []
+        for item in bon.items.all():
+            items_data.append({
+                'id': item.id,
+                'product_id': item.product.id,
+                'product_name': item.product.name,
+                'quantity': item.quantity,
+                'unit_price': item.unit_price,
+                'total_price': item.total_price
+            })
+        
+        # Get additional charges data
+        charges_data = []
+        for charge in bon.additional_charges.all():
+            charges_data.append({
+                'id': charge.id,
+                'description': charge.description,
+                'amount': charge.amount
+            })
+        
         bons_data.append({
             'id': bon.id,
             'bl_number': bon.bl_number,
@@ -1328,50 +1720,347 @@ def bon_livraison_list(request):
             'payment_method': bon.payment_method,
             'total_amount': bon.total_amount,
             'created_by': bon.created_by.username if bon.created_by else None,
-            'created_at': bon.created_at
+            'created_at': bon.created_at,
+            'items': items_data,
+            'additional_charges': charges_data
         })
     
     return Response(bons_data)
+
+
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def create_bon_commande(request):
     data = request.data
     
-    bon_commande = BonDeCommande.objects.create(
-        description=data.get('description', ''),
-        created_by=request.user
-    )
+    # Validate required data
+    items_data = data.get('items', [])
+    if not items_data:
+        return Response({
+            'error': 'Au moins un article est requis'
+        }, status=status.HTTP_400_BAD_REQUEST)
     
-    return Response({
-        'message': 'Bon de commande créé avec succès',
-        'bc_id': bon_commande.id,
-        'bc_number': bon_commande.bc_number
-    }, status=status.HTTP_201_CREATED)
+    try:
+        with transaction.atomic():
+            # Create the bon de commande
+            bon_commande = BonDeCommande.objects.create(
+                description=data.get('description', ''),
+                doit=data.get('doit', ''),  # Added doit field
+                created_by=request.user
+            )
+            
+            # Create the items
+            created_items = []
+            for item_data in items_data:
+                # Validate required fields for each item
+                required_fields = ['name', 'quantity', 'prix_unitaire']
+                missing_fields = [field for field in required_fields if not item_data.get(field)]
+                
+                if missing_fields:
+                    return Response({
+                        'error': f'Champs requis manquants pour un article: {", ".join(missing_fields)}'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                
+                try:
+                    # Find existing product by name or create new one
+                    product, created = Product.objects.get_or_create(
+                        name=item_data['name'],
+                        defaults={
+                            'name': item_data['name'],
+                            'description': item_data.get('description', '')
+                        }
+                    )
+                    
+                    # Create the BonDeCommandeItem
+                    item = BonDeCommandeItem.objects.create(
+                        bon_de_commande=bon_commande,
+                        product=product,
+                        designation=item_data['name'],
+                        quantity=item_data['quantity'],
+                        prix_unitaire=item_data['prix_unitaire']
+                    )
+                    
+                    created_items.append({
+                        'id': item.id,
+                        'product_id': product.id,
+                        'product_name': product.name,
+                        'designation': item.designation,
+                        'quantity': str(item.quantity),
+                        'prix_unitaire': str(item.prix_unitaire),
+                        'montant_ht': str(item.montant_ht),
+                        'product_created': created
+                    })
+                    
+                except Exception as e:
+                    return Response({
+                        'error': f'Erreur lors de la création de l\'article: {str(e)}'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Calculate and update the total_ht after all items are created
+            total_ht = bon_commande.calculate_total_ht()
+            bon_commande.total_ht = total_ht
+            bon_commande.save(update_fields=['total_ht'])
+            
+            return Response({
+                'message': 'Bon de commande créé avec succès',
+                'bc_id': bon_commande.id,
+                'bc_number': bon_commande.bc_number,
+                'total_ht': str(bon_commande.total_ht),
+                'doit': bon_commande.doit,
+                'items_created': len(created_items),
+                'items': created_items
+            }, status=status.HTTP_201_CREATED)
+            
+    except Exception as e:
+        return Response({
+            'error': f'Erreur lors de la création du bon de commande: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def bon_commande_list(request):
-    bons = BonDeCommande.objects.all()
+    # Use select_related and prefetch_related for better performance
+    bons = BonDeCommande.objects.select_related('created_by').prefetch_related('items__product').all()
     
     bons_data = []
     for bon in bons:
+        # Get items data
+        items_data = []
+        for item in bon.items.all():
+            items_data.append({
+                'id': item.id,
+                'product_id': item.product.id,
+                'product_name': item.product.name if hasattr(item.product, 'name') else str(item.product),
+                'designation': item.designation,
+                'quantity': item.quantity,
+                'prix_unitaire': str(item.prix_unitaire),
+                'montant_ht': str(item.montant_ht)
+            })
+        
         bons_data.append({
             'id': bon.id,
             'bc_number': bon.bc_number,
             'date_commande': bon.date_commande,
             'description': bon.description,
-            'total_ht': bon.total_ht,
+            'doit': bon.doit,
+            'total_ht': str(bon.total_ht),
             'created_by': bon.created_by.username if bon.created_by else None,
-            'created_at': bon.created_at
+            'created_at': bon.created_at,
+            'items_count': len(items_data),
+            'items': items_data,
+            'has_pdf': bon.has_pdf()
         })
     
     return Response(bons_data)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def bon_commande_detail(request, bc_id):
+    try:
+        bon = BonDeCommande.objects.select_related('created_by').prefetch_related('items__product').get(id=bc_id)
+        
+        # Get items data
+        items_data = []
+        for item in bon.items.all():
+            items_data.append({
+                'id': item.id,
+                'product_id': item.product.id,
+                'product_name': item.product.name if hasattr(item.product, 'name') else str(item.product),
+                'designation': item.designation,
+                'quantity': item.quantity,
+                'prix_unitaire': str(item.prix_unitaire),
+                'montant_ht': str(item.montant_ht)
+            })
+        
+        bon_data = {
+            'id': bon.id,
+            'bc_number': bon.bc_number,
+            'date_commande': bon.date_commande,
+            'description': bon.description,
+            'doit': bon.doit,
+            'total_ht': str(bon.total_ht),
+            'created_by': bon.created_by.username if bon.created_by else None,
+            'created_at': bon.created_at,
+            'items': items_data,
+            'has_pdf': bon.has_pdf()
+        }
+        
+        return Response(bon_data)
+        
+    except BonDeCommande.DoesNotExist:
+        return Response({
+            'error': 'Bon de commande non trouvé'
+        }, status=status.HTTP_404_NOT_FOUND)
+
+@api_view(['PUT'])
+@permission_classes([IsAuthenticated])
+def update_bon_commande(request, bc_id):
+    try:
+        bon_commande = BonDeCommande.objects.get(id=bc_id)
+        data = request.data
+        
+        items_data = data.get('items', [])
+        if not items_data:
+            return Response({
+                'error': 'Au moins un article est requis'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        with transaction.atomic():
+            # Update bon de commande fields
+            bon_commande.description = data.get('description', bon_commande.description)
+            bon_commande.doit = data.get('doit', bon_commande.doit)
+            bon_commande.save()
+            
+            # Delete existing items and create new ones
+            bon_commande.items.all().delete()
+            
+            # Create new items
+            created_items = []
+            for item_data in items_data:
+                required_fields = ['name', 'quantity', 'prix_unitaire']
+                missing_fields = [field for field in required_fields if not item_data.get(field)]
+                
+                if missing_fields:
+                    return Response({
+                        'error': f'Champs requis manquants pour un article: {", ".join(missing_fields)}'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                
+                # Find existing product by name or create new one
+                product, created = Product.objects.get_or_create(
+                    name=item_data['name'],
+                    defaults={
+                        'name': item_data['name'],
+                        'description': item_data.get('description', '')
+                    }
+                )
+                
+                # Create the BonDeCommandeItem
+                item = BonDeCommandeItem.objects.create(
+                    bon_de_commande=bon_commande,
+                    product=product,
+                    designation=item_data['name'],
+                    quantity=item_data['quantity'],
+                    prix_unitaire=item_data['prix_unitaire']
+                )
+                
+                created_items.append({
+                    'id': item.id,
+                    'product_id': product.id,
+                    'product_name': product.name,
+                    'designation': item.designation,
+                    'quantity': str(item.quantity),
+                    'prix_unitaire': str(item.prix_unitaire),
+                    'montant_ht': str(item.montant_ht),
+                    'product_created': created
+                })
+            
+            # Recalculate total
+            total_ht = bon_commande.calculate_total_ht()
+            bon_commande.total_ht = total_ht
+            bon_commande.save(update_fields=['total_ht'])
+            
+            return Response({
+                'message': 'Bon de commande mis à jour avec succès',
+                'bc_id': bon_commande.id,
+                'bc_number': bon_commande.bc_number,
+                'total_ht': str(bon_commande.total_ht),
+                'doit': bon_commande.doit,
+                'items': created_items
+            })
+            
+    except BonDeCommande.DoesNotExist:
+        return Response({
+            'error': 'Bon de commande non trouvé'
+        }, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({
+            'error': f'Erreur lors de la mise à jour: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_bon_commande(request, bc_id):
+    try:
+        bon_commande = BonDeCommande.objects.get(id=bc_id)
+        bc_number = bon_commande.bc_number
+        
+        # Delete the PDF file if it exists
+        if bon_commande.pdf_file and os.path.exists(bon_commande.pdf_file.path):
+            os.remove(bon_commande.pdf_file.path)
+        
+        bon_commande.delete()
+        
+        return Response({
+            'message': f'Bon de commande {bc_number} supprimé avec succès'
+        })
+        
+    except BonDeCommande.DoesNotExist:
+        return Response({
+            'error': 'Bon de commande non trouvé'
+        }, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({
+            'error': f'Erreur lors de la suppression: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def generate_and_download_pdf(request, bc_id):
+    """
+    Generate PDF from HTML template using WeasyPrint and download it directly
+    """
+    try:
+        bon = get_object_or_404(BonDeCommande, id=bc_id)
+        
+        # Render HTML template
+        html_content = render_to_string('bc/bon_de_command.html', {
+            'bon': bon,
+        })
+        
+        # Create PDF from HTML using WeasyPrint
+        html = HTML(string=html_content, base_url=request.build_absolute_uri())
+        pdf_content = html.write_pdf()
+        
+        # Save PDF to model (optional - for keeping record)
+        filename = bon.get_pdf_filename()
+        pdf_path = os.path.join('bon_commande_pdfs', filename)
+        full_path = os.path.join(settings.MEDIA_ROOT, pdf_path)
+        
+        # Create directory if it doesn't exist
+        os.makedirs(os.path.dirname(full_path), exist_ok=True)
+        
+        # Save to file
+        with open(full_path, 'wb') as f:
+            f.write(pdf_content)
+        
+        # Update model
+        bon.pdf_file.name = pdf_path
+        bon.pdf_generated_by = request.user
+        bon.pdf_generated_at = timezone.now()
+        bon.save(update_fields=['pdf_file', 'pdf_generated_by', 'pdf_generated_at'])
+        
+        # Return PDF as download response
+        response = HttpResponse(pdf_content, content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        response['Content-Length'] = len(pdf_content)
+        return response
+        
+    except Exception as e:
+        return Response({
+            'error': f'Erreur lors de la génération du PDF: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def create_ordre_mission(request):
     data = request.data
+    
+    # Helper function to handle date fields
+    def parse_date_field(date_str):
+        if not date_str or date_str == '':
+            return None
+        return date_str
     
     ordre_mission = OrdreDeMission.objects.create(
         nom_prenom=data['nom_prenom'],
@@ -1383,7 +2072,7 @@ def create_ordre_mission(request):
         matricule=data['matricule'],
         matricule_2=data.get('matricule_2'),
         date_depart=data['date_depart'],
-        date_retour=data.get('date_retour'),
+        date_retour=parse_date_field(data.get('date_retour')),  # Handle empty date
         accompagne_par=data.get('accompagne_par', ''),
         created_by=request.user.username
     )
@@ -1460,7 +2149,138 @@ def dashboard_stats(request):
         )
     })
 
+@api_view(['PUT'])
+@permission_classes([IsAuthenticated])
+def update_ordre_mission(request, pk):
+    try:
+        ordre_mission = OrdreDeMission.objects.get(pk=pk)
+        data = request.data
+        
+        # Helper function to handle date fields
+        def parse_date_field(date_str):
+            if not date_str or date_str == '':
+                return None
+            return date_str
+        
+        ordre_mission.nom_prenom = data['nom_prenom']
+        ordre_mission.fonction = data['fonction']
+        ordre_mission.adresse = data['adresse']
+        ordre_mission.destination = data['destination']
+        ordre_mission.motif = data['motif']
+        ordre_mission.moyen_deplacement = data['moyen_deplacement']
+        ordre_mission.matricule = data['matricule']
+        ordre_mission.matricule_2 = data.get('matricule_2')
+        ordre_mission.date_depart = data['date_depart']
+        ordre_mission.date_retour = parse_date_field(data.get('date_retour'))  # Handle empty date
+        ordre_mission.accompagne_par = data.get('accompagne_par', '')
+        
+        ordre_mission.save()
+        
+        return Response({
+            'message': 'Ordre de mission mis à jour avec succès',
+            'mission_id': ordre_mission.id,
+            'numero': ordre_mission.numero
+        })
+        
+    except OrdreDeMission.DoesNotExist:
+        return Response({'error': 'Ordre de mission non trouvé'}, status=status.HTTP_404_NOT_FOUND)
 
+# Delete function
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_ordre_mission(request, mission_id):
+    try:
+        ordre_mission = get_object_or_404(OrdreDeMission, id=mission_id)
+        numero = ordre_mission.numero
+        ordre_mission.delete()
+        
+        return Response({
+            'message': f'Ordre de mission {numero} supprimé avec succès'
+        }, status=status.HTTP_200_OK)
+        
+    except OrdreDeMission.DoesNotExist:
+        return Response({
+            'error': 'Ordre de mission non trouvé'
+        }, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({
+            'error': f'Erreur lors de la suppression: {str(e)}'
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+# Get single mission details
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_ordre_mission(request, mission_id):
+    try:
+        ordre_mission = get_object_or_404(OrdreDeMission, id=mission_id)
+        
+        mission_data = {
+            'id': ordre_mission.id,
+            'numero': ordre_mission.numero,
+            'nom_prenom': ordre_mission.nom_prenom,
+            'fonction': ordre_mission.fonction,
+            'adresse': ordre_mission.adresse,
+            'destination': ordre_mission.destination,
+            'motif': ordre_mission.motif,
+            'moyen_deplacement': ordre_mission.moyen_deplacement,
+            'matricule': ordre_mission.matricule,
+            'matricule_2': ordre_mission.matricule_2,
+            'date_depart': ordre_mission.date_depart,
+            'date_retour': ordre_mission.date_retour,
+            'accompagne_par': ordre_mission.accompagne_par,
+            'created_by': ordre_mission.created_by,
+            'date_creation': ordre_mission.date_creation
+        }
+        
+        return Response(mission_data, status=status.HTTP_200_OK)
+        
+    except OrdreDeMission.DoesNotExist:
+        return Response({
+            'error': 'Ordre de mission non trouvé'
+        }, status=status.HTTP_404_NOT_FOUND)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def download_ordre_mission_pdf_weasy(request, mission_id):
+    try:
+        from weasyprint import HTML, CSS
+        from django.template.loader import render_to_string
+        
+        ordre_mission = get_object_or_404(OrdreDeMission, id=mission_id)
+        
+        # Prepare context data
+        context = {
+            'ordre': ordre_mission,
+            'date_today': datetime.now().strftime('%d/%m/%Y'),
+            'date_depart_formatted': ordre_mission.date_depart.strftime('%d/%m/%Y'),
+            'date_retour_formatted': ordre_mission.get_date_retour_display(),
+            'matrcule_2': ordre_mission.matricule_2 or '',
+            'motif_display': ordre_mission.motif,
+            'qr_code_data': ordre_mission.generate_qr_code()
+        }
+        
+        # Render HTML
+        html_string = render_to_string('Missions/ordre_de_mission.html', context)
+        
+        # Generate PDF with WeasyPrint
+        html = HTML(string=html_string)
+        pdf = html.write_pdf()
+        
+        # Create response
+        response = HttpResponse(pdf, content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="ordre_mission_{ordre_mission.numero.replace("/", "_")}.pdf"'
+        
+        return response
+        
+    except ImportError:
+        return HttpResponse("WeasyPrint non installé. Utilisez: pip install weasyprint", 
+                          status=500)
+    except OrdreDeMission.DoesNotExist:
+        raise Http404("Ordre de mission non trouvé")
+    except Exception as e:
+        return HttpResponse(f"Erreur lors de la génération du PDF: {str(e)}", 
+                          status=500)
+    
 from decimal import Decimal
 from django.shortcuts import get_object_or_404
 from rest_framework.decorators import api_view, permission_classes

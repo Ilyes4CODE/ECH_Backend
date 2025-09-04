@@ -413,6 +413,7 @@ class BonDeCommande(models.Model):
     date_commande = models.DateField(auto_now_add=True)
     description = models.TextField(blank=True)
     total_ht = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
+    doit = models.CharField(max_length=200, blank=True) 
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_bon_commandes')
     pdf_generated_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='generated_bc_pdfs')
     pdf_file = models.FileField(upload_to=bon_commande_pdf_path, blank=True, null=True)
