@@ -43,8 +43,8 @@ INSTALLED_APPS = [
     'corsheaders',
     'rest_framework_simplejwt',
     'channels',
-    'Auth',
-    'Gestion',
+    'Auth.apps.AuthConfig',
+    'Gestion.apps.GestionConfig',
 ]
 
 MIDDLEWARE = [
