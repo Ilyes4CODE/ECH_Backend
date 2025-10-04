@@ -131,12 +131,15 @@ DATABASES = {
     #     'NAME': BASE_DIR / 'db.sqlite3',
     # }
     'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'echsah07_Base_Client',        # database name
-        'USER': 'echsah07_ECH',        # database user
-        'PASSWORD': '.@vFZ1;V9pR=K-r^',   # the exact password you set in cPanel
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'echsah07_django',
+        'USER': 'echsah07_ilyes',
+        'PASSWORD': 'B-AV)qVE_$Ko*nuy',
         'HOST': 'localhost',
-        'PORT': '5432',
+        'PORT': '3306',  # default MySQL port
+        'OPTIONS': {
+            'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+        },
     }
 }
 
