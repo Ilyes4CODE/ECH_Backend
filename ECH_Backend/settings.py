@@ -135,11 +135,8 @@ DATABASES = {
         'NAME': 'echsah07_django',
         'USER': 'echsah07_ilyes',
         'PASSWORD': 'B-AV)qVE_$Ko*nuy',
-        'HOST': 'mysql.echsahra.com',
+        'HOST': '157.90.66.113',
         'PORT': '3306',  # default MySQL port
-        'OPTIONS': {
-            'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
-        },
     }
 }
 
