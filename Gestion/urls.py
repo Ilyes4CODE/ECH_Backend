@@ -9,13 +9,18 @@ urlpatterns = [
     path('caisse/operations/history/pdf/', views.generate_caisse_history_pdf, name='generate_caisse_history_pdf'),
     path('caisse/history/', views.caisse_history, name='caisse_history'),
     path('caisse/operation/<int:history_id>/pdf/', views.generate_operation_pdf, name='generate_operation_pdf'),
+    # Admin: update / delete a caisse operation (recomputes caisse balance + project totals)
+    path('caisse/operation/<int:history_id>/update/', views.update_caisse_history_entry, name='update_caisse_history_entry'),
+    path('caisse/operation/<int:history_id>/delete/', views.delete_caisse_history_entry, name='delete_caisse_history_entry'),
+    path('caisse/operation-direct/<int:operation_id>/update/', views.update_caisse_operation, name='update_caisse_operation'),
+    path('caisse/operation-direct/<int:operation_id>/delete/', views.delete_caisse_operation, name='delete_caisse_operation'),
 
     path('projects/', views.project_list, name='project_list'),
     path('projects/create/', views.create_project, name='create_project'),
+    path('projects/project-finance-pdf/', views.generate_project_finance_pdf, name='generate_project_finance_pdf'),
     path('projects/<int:project_id>/pdf/', views.generate_project_pdf, name='generate_project_pdf'),
     path('projects/<int:project_id>/', views.project_detail, name='project_detail'),
     path('projects/<int:project_id>/update/', views.update_project, name='update_project'),
-    path('projects/project-finance-pdf/', views.generate_project_finance_pdf, name='generate_project_finance_pdf'),
     
     path('dettes/', views.dette_list, name='dette_list'),
     path('dettes/create/', views.create_dette, name='create_dette'),
@@ -26,14 +31,15 @@ urlpatterns = [
     path('bon-livraison/', views.bon_livraison_list, name='bon_livraison_list'),
     path('bon-livraison/create/', views.create_bon_livraison, name='create_bon_livraison'),
     path('bon-livraison/<int:bon_id>/pdf/', views.generate_bon_livraison_pdf, name='generate_bon_commande_pdf'),
-    path('bon-livraison/<int:bon_id>/delete/', views.delete_bon_livraison, name='bon_livraison_detail'),
+    path('bon-livraison/<int:bon_id>/delete/', views.delete_bon_livraison, name='delete_bon_livraison'),
     path('bon-livraison/<int:bon_id>/update/', views.update_bon_livraison, name='update_bon_livraison'),
     
     
     path('bon-commande/', views.bon_commande_list, name='bon_commande_list'),
     path('bon-commande/create/', views.create_bon_commande, name='create_bon_commande'),
+    path('bon-commande/<int:bc_id>/', views.bon_commande_detail, name='bon_commande_detail'),
     path('bon-commande/<int:bc_id>/update/', views.update_bon_commande, name='update_bon_commande'),
-    path('bon-commande/<int:bc_id>/delete/',views.delete_bon_commande, name='delete_bon_commande'),
+    path('bon-commande/<int:bc_id>/delete/', views.delete_bon_commande, name='delete_bon_commande'),
     path('bon-commande/<int:bc_id>/pdf/', views.generate_and_download_pdf, name='generate_bon_commande_pdf'),
     
     path('ordre-mission/', views.ordre_mission_list, name='ordre_mission_list'),

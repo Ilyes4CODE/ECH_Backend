@@ -22,13 +22,34 @@ from datetime import datetime, timedelta
 import qrcode
 from io import BytesIO
 import base64
-from weasyprint import HTML, CSS
-from weasyprint.text.fonts import FontConfiguration
-from PIL import Image
-from django.http import HttpResponse,Http404
+from django.http import HttpResponse, Http404
 from django.template.loader import render_to_string
 from django.utils.dateparse import parse_datetime, parse_date
+from utils.i18n import msg, tr
+from .pdf_utils import (
+    generate_bl_pdf,
+    generate_bc_pdf,
+    generate_ordre_mission_pdf,
+    generate_caisse_history_pdf as generate_caisse_history_pdf_latex,
+    generate_operation_pdf as generate_operation_pdf_latex,
+    generate_project_info_pdf,
+    generate_dette_journal_pdf as generate_dette_journal_pdf_latex,
+    generate_project_finance_pdf as generate_project_finance_pdf_latex,
+    generate_qr_png_b64,
+    escape_latex,
+)
 from django.contrib.auth.models import User
+
+
+class FinanceEntryProxy:
+    """
+    Lightweight proxy object used by generate_project_finance_pdf to pass
+    finance-entry data to the LaTeX PDF generator in the same shape that
+    CaisseHistory objects have.
+    """
+    __slots__ = ('numero', 'date', 'action', 'amount', 'balance_after', 'description')
+
+
 def get_or_create_global_caisse():
     """Get the global caisse or create it if it doesn't exist"""
     caisse = GlobalCaisse.objects.first()
@@ -74,12 +95,27 @@ def caisse_encaissement(request):
             return Response({
                 'error': 'Project ID is required when income source is "collaborator"'
             }, status=status.HTTP_400_BAD_REQUEST)
-        
+
+        # Safe cast of optional FK ids
+        enc_project_id = None
+        if income_source == 'collaborator' and data.get('project_id'):
+            try:
+                enc_project_id = int(data['project_id'])
+            except (ValueError, TypeError):
+                return Response({'error': 'Invalid project_id'}, status=status.HTTP_400_BAD_REQUEST)
+
+        enc_dette_id = None
+        if data.get('dette_id'):
+            try:
+                enc_dette_id = int(data['dette_id'])
+            except (ValueError, TypeError):
+                return Response({'error': 'Invalid dette_id'}, status=status.HTTP_400_BAD_REQUEST)
+
         operation = CaisseOperation.objects.create(
             operation_type='encaissement',
             amount=amount,
             description=data.get('description', ''),
-            preuve_file=data.get('preuve_file'),
+            preuve_file=request.FILES.get('preuve_file'),
             mode_paiement=data.get('mode_paiement'),
             nom_fournisseur=data.get('nom_fournisseur'),
             banque=data.get('banque'),
@@ -88,8 +124,8 @@ def caisse_encaissement(request):
             observation=data.get('observation'),
             user=request.user,
             by_collaborator=by_collaborator,
-            project_id=data.get('project_id') if income_source == 'collaborator' else None,
-            dette_id=data.get('dette_id'),
+            project_id=enc_project_id,
+            dette_id=enc_dette_id,
             balance_before=balance_before,
             balance_after=balance_after,
             date=operation_date
@@ -102,7 +138,7 @@ def caisse_encaissement(request):
                 original_amount=amount,
                 remaining_amount=amount,
                 description=data.get('description', f'Dette créée lors de l\'encaissement du {operation_date.strftime("%d/%m/%Y")}'),
-                project_id=data.get('project_id'),
+                project_id=enc_project_id,
                 created_by=request.user,
                 status='active'
             )
@@ -117,13 +153,13 @@ def caisse_encaissement(request):
             balance_after=balance_after,
             operation=operation,
             user=request.user,
-            project_id=data.get('project_id') if income_source == 'collaborator' else None,
+            project_id=enc_project_id,
             description=data.get('description', ''),
             date=operation_date
         )
         
         response_data = {
-            'message': 'Encaissement effectué avec succès',
+            'message': msg(request, 'encaissement_done'),
             'operation_id': operation.id,
             'history_numero': caisse_history.numero,
             'new_balance': balance_after,
@@ -152,38 +188,46 @@ def caisse_decaissement(request):
         
         if balance_before < amount:
             return Response({
-                'error': 'Solde insuffisant'
+                'error': msg(request, 'insufficient_balance')
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        if not data.get('project_id'):
+        raw_project_id = data.get('project_id')
+        if not raw_project_id:
             return Response({
                 'error': 'Project ID is required for decaissement'
             }, status=status.HTTP_400_BAD_REQUEST)
-        
+
+        try:
+            project_id_int = int(raw_project_id)
+        except (ValueError, TypeError):
+            return Response({
+                'error': 'Invalid project_id'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
         balance_after = balance_before - amount
-        
+
         caisse.total_amount = balance_after
         caisse.save()
-        
+
         operation_date = parse_date(data.get('date')) or datetime.now().date()
-        
+
         operation = CaisseOperation.objects.create(
             operation_type='decaissement',
             amount=amount,
             description=data.get('description', ''),
-            preuve_file=data.get('preuve_file'),
+            preuve_file=request.FILES.get('preuve_file'),
             mode_paiement=data.get('mode_paiement'),
             nom_fournisseur=data.get('nom_fournisseur'),
             banque=data.get('banque'),
             numero_cheque=data.get('numero_cheque'),
             user=request.user,
-            project_id=data.get('project_id'),
+            project_id=project_id_int,
             balance_before=balance_before,
             balance_after=balance_after,
             date=operation_date
         )
-        
-        project = get_object_or_404(Project, id=data['project_id'])
+
+        project = get_object_or_404(Project, id=project_id_int)
         project.total_depenses += amount
         project.save()
         
@@ -200,7 +244,7 @@ def caisse_decaissement(request):
         )
         
         return Response({
-            'message': 'Décaissement effectué avec succès',
+            'message': msg(request, 'decaissement_done'),
             'operation_id': operation.id,
             'history_numero': caisse_history.numero,
             'new_balance': balance_after,
@@ -220,8 +264,12 @@ def caisse_operations_history(request):
     
     project_id = request.GET.get('project_id')
     if project_id:
-        operations = operations.filter(project_id=project_id)
-    
+        try:
+            project_id = int(project_id)
+            operations = operations.filter(project_id=project_id)
+        except (ValueError, TypeError):
+            return Response({'error': 'Invalid project_id'}, status=status.HTTP_400_BAD_REQUEST)
+
     year = request.GET.get('year')
     if year:
         operations = operations.filter(created_at__year=year)
@@ -263,12 +311,14 @@ def caisse_operations_history(request):
             'banque': op.banque,
             'numero_cheque': op.numero_cheque,
             'income_source': op.income_source,
-            'bank_name': op.bank_name,
+            'observation': op.observation,
+            'by_collaborator': op.by_collaborator,
             'project_name': op.project.name if op.project else None,
             'dette_creditor': op.dette.creditor_name if op.dette else None,
             'user': op.user.username if op.user else None,
             'balance_before': op.balance_before,
             'balance_after': op.balance_after,
+            'date': op.date,
             'created_at': op.created_at,
             'preuve_file': preuve_file_url,
             'has_preuve': bool(op.preuve_file),
@@ -287,21 +337,29 @@ def generate_caisse_history_pdf(request):
     # Apply filters based on query parameters (same as history function)
     filters = Q()
     
-    # Filter by project
+    # Filter by project (guard against non-integer values like "null")
     project_id = request.GET.get('project_id')
     if project_id:
-        filters &= Q(project_id=project_id)
-    
-    # Filter by user
+        try:
+            project_id = int(project_id)
+            filters &= Q(project_id=project_id)
+        except (ValueError, TypeError):
+            project_id = None
+
+    # Filter by user (same guard)
     user_id = request.GET.get('user_id')
     if user_id:
-        filters &= Q(user_id=user_id)
-    
+        try:
+            user_id = int(user_id)
+            filters &= Q(user_id=user_id)
+        except (ValueError, TypeError):
+            user_id = None
+
     # Filter by action
     action = request.GET.get('action')
     if action:
         filters &= Q(action=action)
-    
+
     # Filter by date range
     date_from = request.GET.get('date_from')
     date_to = request.GET.get('date_to')
@@ -360,14 +418,18 @@ def generate_caisse_history_pdf(request):
         collaborator_filter = by_collaborator.lower() == 'true'
         filters &= Q(operation__by_collaborator=collaborator_filter)
     
-    if request.GET.get('dette_id'):
-        filters &= Q(operation__dette_id=request.GET.get('dette_id'))
-    
+    dette_id_param_pdf = request.GET.get('dette_id')
+    if dette_id_param_pdf:
+        try:
+            filters &= Q(operation__dette_id=int(dette_id_param_pdf))
+        except (ValueError, TypeError):
+            pass
+
     # Filter by numero
     numero = request.GET.get('numero')
     if numero:
         filters &= Q(numero__icontains=numero)
-    
+
     # Search in description and observation
     search = request.GET.get('search')
     if search:
@@ -563,14 +625,12 @@ def generate_caisse_history_pdf(request):
         'has_espece': has_espece,
     }
     
-    # Render HTML template
-    html_string = render_to_string('history/caisse_history.html', context)
-    
-    # Generate PDF
-    font_config = FontConfiguration()
-    html = HTML(string=html_string)
-    pdf = html.write_pdf(font_config=font_config)
-    
+    # Generate PDF via LaTeX
+    try:
+        pdf = generate_caisse_history_pdf_latex(history_with_context, context)
+    except RuntimeError as exc:
+        return Response({'error': str(exc)}, status=500)
+
     # Generate filename with filters info
     filename_parts = ["historique_caisse"]
     
@@ -620,7 +680,7 @@ def create_project(request):
         )
         
         return Response({
-            'message': 'Projet créé avec succès',
+            'message': msg(request, 'project_created'),
             'project_id': project.id,
             'project_name': project.name
         }, status=status.HTTP_201_CREATED)
@@ -689,6 +749,7 @@ def project_detail(request, project_id):
 
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def generate_project_pdf(request, project_id):
     """
     Generate PDF for project information
@@ -712,40 +773,15 @@ def generate_project_pdf(request, project_id):
             'created_at': project.created_at.strftime('%d/%m/%Y à %H:%M'),
         }
         
-        # Load template
-        template = get_template('projects/project_info_pdf.html')
-        html_content = template.render(context)
-        
-        # Generate PDF
-        pdf_file = BytesIO()
-        
-        # CSS for sticker styling
-        css_content = """
-        @page {
-            size: 10cm 7cm;
-            margin: 0.5cm;
-        }
-        body {
-            font-family: 'DejaVu Sans', Arial, sans-serif;
-            font-size: 11px;
-            line-height: 1.3;
-            color: #000;
-        }
-        """
-        
-        HTML(string=html_content).write_pdf(
-            pdf_file,
-            stylesheets=[CSS(string=css_content)]
-        )
-        
-        pdf_file.seek(0)
-        
-        # Create response
-        response = HttpResponse(pdf_file.read(), content_type='application/pdf')
+        try:
+            pdf_bytes = generate_project_info_pdf(project)
+        except RuntimeError as exc:
+            return Response({'error': str(exc)}, status=500)
+
+        response = HttpResponse(pdf_bytes, content_type='application/pdf')
         response['Content-Disposition'] = f'attachment; filename="etiquette_projet_{project.id}.pdf"'
-        
         return response
-        
+
     except Exception as e:
         return Response({
             'error': 'Erreur lors de la génération du PDF',
@@ -790,7 +826,7 @@ def update_project(request, project_id):
     
     
     return Response({
-        'message': 'Projet mis à jour avec succès',
+        'message': msg(request, 'project_updated'),
         'project': {
             'id': project.id,
             'name': project.name,
@@ -810,14 +846,22 @@ def create_dette(request):
     
     # Convert string amounts to Decimal
     original_amount = Decimal(str(data['original_amount']))
-    
+
+    # Safe cast of optional project_id
+    dette_project_id = None
+    if data.get('project_id'):
+        try:
+            dette_project_id = int(data['project_id'])
+        except (ValueError, TypeError):
+            return Response({'error': 'Invalid project_id'}, status=status.HTTP_400_BAD_REQUEST)
+
     # Get current balance from the latest history entry
     latest_history = CaisseHistory.objects.order_by('-created_at').first()
     current_balance = latest_history.balance_after if latest_history else Decimal('0.00')
-    
+
     # Calculate new balance after receiving the dette (encaissement)
     new_balance = current_balance + original_amount
-    
+
     # Use atomic transaction to ensure both dette and history are created together
     with transaction.atomic():
         # Create the Dette
@@ -826,10 +870,10 @@ def create_dette(request):
             original_amount=original_amount,
             remaining_amount=original_amount,
             description=data.get('description', ''),
-            project_id=data.get('project_id'),
+            project_id=dette_project_id,
             created_by=request.user
         )
-        
+
         # Create corresponding CaisseHistory entry
         CaisseHistory.objects.create(
             action='encaissement',
@@ -837,13 +881,13 @@ def create_dette(request):
             balance_before=current_balance,
             balance_after=new_balance,
             user=request.user,
-            project_id=data.get('project_id'),
+            project_id=dette_project_id,
             description=f"Dette créée - {data['creditor_name']}: {data.get('description', '')}",
             date=data.get('date', date.today())  # Use provided date or today
         )
     
     return Response({
-        'message': 'Dette créée avec succès et enregistrée dans l\'historique',
+        'message': msg(request, 'dette_created'),
         'dette_id': dette.id,
         'creditor_name': dette.creditor_name,
         'original_amount': dette.original_amount,
@@ -861,8 +905,12 @@ def dette_list(request):
     
     project_id = request.GET.get('project_id')
     if project_id:
-        dettes = dettes.filter(project_id=project_id)
-    
+        try:
+            project_id = int(project_id)
+            dettes = dettes.filter(project_id=project_id)
+        except (ValueError, TypeError):
+            return Response({'error': 'Invalid project_id'}, status=status.HTTP_400_BAD_REQUEST)
+
     dettes_data = []
     for dette in dettes:
         dettes_data.append({
@@ -939,7 +987,7 @@ def dette_payment(request, dette_id):
         
         if balance_before < amount_paid:
             return Response({
-                'error': 'Solde insuffisant dans la caisse'
+                'error': msg(request, 'insufficient_balance')
             }, status=status.HTTP_400_BAD_REQUEST)
         
         caisse.total_amount = balance_after
@@ -949,7 +997,7 @@ def dette_payment(request, dette_id):
             operation_type='decaissement',
             amount=amount_paid,
             description=f'Paiement dette - {dette.creditor_name}',
-            preuve_file=data.get('preuve_file'),
+            preuve_file=request.FILES.get('preuve_file'),
             mode_paiement=data.get('mode_paiement'),
             nom_fournisseur=data.get('nom_fournisseur'),
             banque=data.get('banque'),
@@ -960,12 +1008,12 @@ def dette_payment(request, dette_id):
             balance_before=balance_before,
             balance_after=balance_after
         )
-        
+
         payment = DettePayment.objects.create(
             dette=dette,
             amount_paid=amount_paid,
             description=data.get('description', ''),
-            preuve_file=data.get('preuve_file'),
+            preuve_file=request.FILES.get('preuve_file'),
             mode_paiement=data.get('mode_paiement'),
             nom_fournisseur=data.get('nom_fournisseur'),
             banque=data.get('banque'),
@@ -989,12 +1037,206 @@ def dette_payment(request, dette_id):
         )
         
         return Response({
-            'message': 'Paiement effectué avec succès',
+            'message': msg(request, 'payment_recorded'),
             'payment_id': payment.id,
             'remaining_amount': dette.remaining_amount,
             'status': dette.status,
             'new_caisse_balance': balance_after
         }, status=status.HTTP_201_CREATED)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Update / Delete a caisse operation (Admin only) — recalculates everything
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _reverse_operation_effect(operation):
+    """Reverse the financial impact of an operation on caisse and project."""
+    caisse = get_or_create_global_caisse()
+    amount = operation.amount
+
+    if operation.operation_type == 'encaissement':
+        caisse.total_amount -= amount
+        if operation.project and operation.by_collaborator:
+            # collaborator encaissement counted in project accreance? — by_collaborator only
+            pass
+    elif operation.operation_type == 'decaissement':
+        caisse.total_amount += amount
+        if operation.project:
+            operation.project.total_depenses -= amount
+            if operation.project.total_depenses < 0:
+                operation.project.total_depenses = Decimal('0.00')
+            operation.project.update_benefices()
+    caisse.save()
+
+
+def _apply_operation_effect(operation, new_amount, new_project=None):
+    """Apply effect after change. Caller should set operation.amount before calling."""
+    caisse = get_or_create_global_caisse()
+    if operation.operation_type == 'encaissement':
+        caisse.total_amount += new_amount
+    elif operation.operation_type == 'decaissement':
+        caisse.total_amount -= new_amount
+        project = new_project or operation.project
+        if project:
+            project.total_depenses += new_amount
+            project.update_benefices()
+    caisse.save()
+
+
+def _do_update_caisse_operation(request, operation):
+    """Core update logic — operates on a resolved CaisseOperation. Returns a Response."""
+    if not request.user.groups.filter(name='Admin').exists():
+        return Response({'detail': msg(request, 'forbidden')},
+                        status=status.HTTP_403_FORBIDDEN)
+
+    if operation.dette_id and DettePayment.objects.filter(caisse_operation=operation).exists():
+        return Response({
+            'detail': msg(request, 'op_linked_to_dette')
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    data = request.data
+    new_amount_raw = data.get('amount')
+    new_description = data.get('description', operation.description)
+    new_date_raw = data.get('date')
+    new_mode = data.get('mode_paiement', operation.mode_paiement)
+    new_fournisseur = data.get('nom_fournisseur', operation.nom_fournisseur)
+    new_banque = data.get('banque', operation.banque)
+    new_cheque = data.get('numero_cheque', operation.numero_cheque)
+    new_project_id_raw = data.get('project_id')
+
+    # Parse amount
+    try:
+        new_amount = Decimal(str(new_amount_raw)) if new_amount_raw is not None else operation.amount
+    except Exception:
+        return Response({'detail': msg(request, 'invalid_amount')}, status=status.HTTP_400_BAD_REQUEST)
+    if new_amount <= 0:
+        return Response({'detail': msg(request, 'amount_positive')}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Parse new project (only allowed for decaissement)
+    new_project = operation.project
+    if new_project_id_raw not in (None, '', 'null'):
+        try:
+            pid = int(new_project_id_raw)
+            new_project = get_object_or_404(Project, id=pid)
+        except (ValueError, TypeError):
+            return Response({'detail': 'project_id invalide.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Parse new date
+    new_date = operation.date
+    if new_date_raw:
+        parsed = parse_date(new_date_raw)
+        if parsed:
+            new_date = parsed
+
+    with transaction.atomic():
+        # 1) Reverse current effect on caisse + project
+        _reverse_operation_effect(operation)
+
+        # 2) Apply new values
+        operation.amount = new_amount
+        operation.description = new_description
+        operation.date = new_date
+        operation.mode_paiement = new_mode
+        operation.nom_fournisseur = new_fournisseur
+        operation.banque = new_banque
+        operation.numero_cheque = new_cheque
+
+        # For decaissement we allow changing the project; for encaissement keep as is
+        if operation.operation_type == 'decaissement':
+            operation.project = new_project
+
+        # 3) Apply new effect
+        caisse = get_or_create_global_caisse()
+        operation.balance_before = caisse.total_amount
+        _apply_operation_effect(operation, new_amount, new_project=new_project)
+        caisse.refresh_from_db()
+        operation.balance_after = caisse.total_amount
+        operation.save()
+
+        # 4) Sync linked CaisseHistory entry
+        history = CaisseHistory.objects.filter(operation=operation).first()
+        if history:
+            history.amount = new_amount
+            history.balance_before = operation.balance_before
+            history.balance_after = operation.balance_after
+            history.date = new_date
+            history.description = new_description
+            if operation.operation_type == 'decaissement':
+                history.project = operation.project
+            history.save()
+
+    return Response({
+        'message': msg(request, 'op_updated'),
+        'operation_id': operation.id,
+        'new_caisse_balance': float(caisse.total_amount),
+        'amount': float(operation.amount),
+    }, status=status.HTTP_200_OK)
+
+
+@api_view(['PUT', 'PATCH'])
+@permission_classes([IsAuthenticated])
+def update_caisse_operation(request, operation_id):
+    """Update a caisse operation by its own ID. Admin only."""
+    operation = get_object_or_404(CaisseOperation, id=operation_id)
+    return _do_update_caisse_operation(request, operation)
+
+
+def _do_delete_caisse_operation(request, operation):
+    """Core delete logic — operates on a resolved CaisseOperation. Returns a Response."""
+    if not request.user.groups.filter(name='Admin').exists():
+        return Response({'detail': msg(request, 'forbidden')},
+                        status=status.HTTP_403_FORBIDDEN)
+
+    if operation.dette_id and DettePayment.objects.filter(caisse_operation=operation).exists():
+        return Response({
+            'detail': msg(request, 'op_delete_linked')
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    with transaction.atomic():
+        _reverse_operation_effect(operation)
+        CaisseHistory.objects.filter(operation=operation).delete()
+        op_id = operation.id
+        operation.delete()
+        caisse = get_or_create_global_caisse()
+
+    return Response({
+        'message': msg(request, 'op_deleted'),
+        'operation_id': op_id,
+        'new_caisse_balance': float(caisse.total_amount),
+    }, status=status.HTTP_200_OK)
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_caisse_operation(request, operation_id):
+    """Delete a caisse operation by its own ID. Admin only."""
+    operation = get_object_or_404(CaisseOperation, id=operation_id)
+    return _do_delete_caisse_operation(request, operation)
+
+
+@api_view(['PUT', 'PATCH'])
+@permission_classes([IsAuthenticated])
+def update_caisse_history_entry(request, history_id):
+    """Update via CaisseHistory id (the id the frontend sees in the table)."""
+    history = get_object_or_404(CaisseHistory, id=history_id)
+    if not history.operation:
+        return Response({'detail': "Cette entrée historique n'a pas d'opération liée."},
+                        status=status.HTTP_400_BAD_REQUEST)
+    return _do_update_caisse_operation(request, history.operation)
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_caisse_history_entry(request, history_id):
+    """Delete via CaisseHistory id."""
+    history = get_object_or_404(CaisseHistory, id=history_id)
+    if not history.operation:
+        if not request.user.groups.filter(name='Admin').exists():
+            return Response({'detail': msg(request, 'forbidden')},
+                            status=status.HTTP_403_FORBIDDEN)
+        history.delete()
+        return Response({'message': 'Entrée supprimée.'}, status=status.HTTP_200_OK)
+    return _do_delete_caisse_operation(request, history.operation)
+
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -1006,21 +1248,29 @@ def caisse_history(request):
     # Apply filters based on query parameters
     filters = Q()
     
-    # Filter by project
+    # Filter by project (guard against non-integer values like "null")
     project_id = request.GET.get('project_id')
     if project_id:
-        filters &= Q(project_id=project_id)
-    
-    # Filter by user
+        try:
+            project_id = int(project_id)
+            filters &= Q(project_id=project_id)
+        except (ValueError, TypeError):
+            project_id = None
+
+    # Filter by user (same guard)
     user_id = request.GET.get('user_id')
     if user_id:
-        filters &= Q(user_id=user_id)
-    
+        try:
+            user_id = int(user_id)
+            filters &= Q(user_id=user_id)
+        except (ValueError, TypeError):
+            user_id = None
+
     # Filter by action
     action = request.GET.get('action')
     if action:
         filters &= Q(action=action)
-    
+
     # Filter by date range
     date_from = request.GET.get('date_from')
     date_to = request.GET.get('date_to')
@@ -1078,14 +1328,18 @@ def caisse_history(request):
         by_collaborator = by_collaborator_param.lower() == 'true'
         filters &= Q(operation__by_collaborator=by_collaborator)
     
-    if request.GET.get('dette_id'):
-        filters &= Q(operation__dette_id=request.GET.get('dette_id'))
-    
+    dette_id_param = request.GET.get('dette_id')
+    if dette_id_param:
+        try:
+            filters &= Q(operation__dette_id=int(dette_id_param))
+        except (ValueError, TypeError):
+            pass
+
     # Filter by numero
     numero = request.GET.get('numero')
     if numero:
         filters &= Q(numero__icontains=numero)
-    
+
     # Search in description and observation
     search = request.GET.get('search')
     if search:
@@ -1095,10 +1349,10 @@ def caisse_history(request):
             Q(operation__observation__icontains=search)
         )
         filters &= search_filters
-    
+
     # Apply all filters
     history = history.filter(filters)
-    
+
     # Only include entries that have operations (for project history)
     history = history.filter(operation__isnull=False)
     
@@ -1286,7 +1540,7 @@ def create_bon_livraison(request):
             bon_livraison.save()
             
             return Response({
-                'message': 'Bon de livraison créé avec succès',
+                'message': msg(request, 'bl_created'),
                 'bl_id': bon_livraison.id,
                 'bl_number': bon_livraison.bl_number,
                 'total_amount': bon_livraison.total_amount
@@ -1422,7 +1676,7 @@ def update_bon_livraison(request, bon_id):
             bon_livraison.save()
             
             return Response({
-                'message': 'Bon de livraison mis à jour avec succès',
+                'message': msg(request, 'bl_updated'),
                 'bl_id': bon_livraison.id,
                 'bl_number': bon_livraison.bl_number,
                 'total_amount': bon_livraison.total_amount
@@ -1460,7 +1714,7 @@ def delete_bon_livraison(request, bon_id):
             bon_livraison.delete()
             
             return Response({
-                'message': f'Bon de livraison {bl_number} supprimé avec succès'
+                'message': msg(request, 'bl_deleted') + (f' (N° {bl_number})' if bl_number else '')
             }, status=status.HTTP_200_OK)
     
     except Exception as e:
@@ -1520,49 +1774,23 @@ Créé par: {bon.created_by.get_full_name() if bon.created_by else 'N/A'}"""
             'qr_code_url': qr_code_url,
         }
         
-        # Render HTML template
-        html_string = render_to_string('BL/pdf_template.html', context)
-        
-        # CSS for PDF generation
-        css_string = """
-        @page {
-            size: A4;
-            margin: 1cm;
-        }
-        
-        body {
-            font-family: 'DejaVu Sans', Arial, sans-serif;
-        }
-        
-        .container {
-            max-width: none;
-            margin: 0;
-            padding: 0;
-        }
-        """
-        
-        # Generate PDF using WeasyPrint
-        font_config = FontConfiguration()
-        html_doc = HTML(string=html_string)
-        css_doc = CSS(string=css_string)
-        pdf = html_doc.write_pdf(stylesheets=[css_doc], font_config=font_config)
-        
+        try:
+            pdf = generate_bl_pdf(bon)
+        except RuntimeError as exc:
+            return Response({'error': str(exc)}, status=500)
+
         # Update the BonDeLivraison record
         bon.pdf_generated_by = request.user
         bon.pdf_generated_at = timezone.now()
-        
-        # Save PDF file to model
+
         pdf_filename = bon.get_pdf_filename()
         pdf_content = ContentFile(pdf)
         pdf_content.name = pdf_filename
-        
         bon.pdf_file.save(pdf_filename, pdf_content, save=False)
         bon.save(update_fields=['pdf_generated_by', 'pdf_generated_at', 'pdf_file'])
-        
-        # Return PDF response
+
         response = HttpResponse(pdf, content_type='application/pdf')
         response['Content-Disposition'] = f'attachment; filename="{pdf_filename}"'
-        
         return response
         
     except BonDeLivraison.DoesNotExist:
@@ -1637,32 +1865,14 @@ def generate_operation_pdf(request, history_id):
             'project': history_entry.project,
         }
         
-        # Render HTML template
-        html_string = render_to_string('caisse/operation_detail_pdf.html', context)
-        
-        # Generate PDF
-        font_config = FontConfiguration()
-        html = HTML(string=html_string)
-        
-        # Create CSS for better PDF rendering
-        css = CSS(string='''
-            @page {
-                size: A4;
-                margin: 1cm;
-            }
-            body {
-                font-family: Arial, sans-serif;
-            }
-        ''', font_config=font_config)
-        
-        # Generate the PDF
-        pdf = html.write_pdf(stylesheets=[css], font_config=font_config)
-        
-        # Create HTTP response
+        try:
+            pdf = generate_operation_pdf_latex(history_entry, request.user)
+        except RuntimeError as exc:
+            return Response({'error': str(exc)}, status=500)
+
         filename = f"operation_{history_entry.numero}_{history_entry.date.strftime('%Y%m%d')}.pdf"
         response = HttpResponse(pdf, content_type='application/pdf')
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
-        
         return response
         
     except CaisseHistory.DoesNotExist:
@@ -1685,8 +1895,12 @@ def bon_livraison_list(request):
     
     project_id = request.GET.get('project_id')
     if project_id:
-        bons = bons.filter(project_id=project_id)
-    
+        try:
+            project_id = int(project_id)
+            bons = bons.filter(project_id=project_id)
+        except (ValueError, TypeError):
+            return Response({'error': 'Invalid project_id'}, status=status.HTTP_400_BAD_REQUEST)
+
     bons_data = []
     for bon in bons:
         # Get items data
@@ -1803,7 +2017,7 @@ def create_bon_commande(request):
             bon_commande.save(update_fields=['total_ht'])
             
             return Response({
-                'message': 'Bon de commande créé avec succès',
+                'message': msg(request, 'bc_created'),
                 'bc_id': bon_commande.id,
                 'bc_number': bon_commande.bc_number,
                 'total_ht': str(bon_commande.total_ht),
@@ -1890,7 +2104,7 @@ def bon_commande_detail(request, bc_id):
         
     except BonDeCommande.DoesNotExist:
         return Response({
-            'error': 'Bon de commande non trouvé'
+            'error': msg(request, 'not_found')
         }, status=status.HTTP_404_NOT_FOUND)
 
 @api_view(['PUT'])
@@ -1961,7 +2175,7 @@ def update_bon_commande(request, bc_id):
             bon_commande.save(update_fields=['total_ht'])
             
             return Response({
-                'message': 'Bon de commande mis à jour avec succès',
+                'message': msg(request, 'bc_updated'),
                 'bc_id': bon_commande.id,
                 'bc_number': bon_commande.bc_number,
                 'total_ht': str(bon_commande.total_ht),
@@ -1971,7 +2185,7 @@ def update_bon_commande(request, bc_id):
             
     except BonDeCommande.DoesNotExist:
         return Response({
-            'error': 'Bon de commande non trouvé'
+            'error': msg(request, 'not_found')
         }, status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
         return Response({
@@ -1992,12 +2206,12 @@ def delete_bon_commande(request, bc_id):
         bon_commande.delete()
         
         return Response({
-            'message': f'Bon de commande {bc_number} supprimé avec succès'
+            'message': msg(request, 'bc_deleted') + (f' (N° {bc_number})' if bc_number else '')
         })
         
     except BonDeCommande.DoesNotExist:
         return Response({
-            'error': 'Bon de commande non trouvé'
+            'error': msg(request, 'not_found')
         }, status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
         return Response({
@@ -2008,39 +2222,28 @@ def delete_bon_commande(request, bc_id):
 @permission_classes([IsAuthenticated])
 def generate_and_download_pdf(request, bc_id):
     """
-    Generate PDF from HTML template using WeasyPrint and download it directly
+    Generate PDF from LaTeX template and download it directly
     """
     try:
         bon = get_object_or_404(BonDeCommande, id=bc_id)
-        
-        # Render HTML template
-        html_content = render_to_string('bc/bon_de_command.html', {
-            'bon': bon,
-        })
-        
-        # Create PDF from HTML using WeasyPrint
-        html = HTML(string=html_content, base_url=request.build_absolute_uri())
-        pdf_content = html.write_pdf()
-        
-        # Save PDF to model (optional - for keeping record)
+
+        try:
+            pdf_content = generate_bc_pdf(bon)
+        except RuntimeError as exc:
+            return Response({'error': str(exc)}, status=500)
+
         filename = bon.get_pdf_filename()
         pdf_path = os.path.join('bon_commande_pdfs', filename)
         full_path = os.path.join(settings.MEDIA_ROOT, pdf_path)
-        
-        # Create directory if it doesn't exist
         os.makedirs(os.path.dirname(full_path), exist_ok=True)
-        
-        # Save to file
         with open(full_path, 'wb') as f:
             f.write(pdf_content)
-        
-        # Update model
+
         bon.pdf_file.name = pdf_path
         bon.pdf_generated_by = request.user
         bon.pdf_generated_at = timezone.now()
         bon.save(update_fields=['pdf_file', 'pdf_generated_by', 'pdf_generated_at'])
-        
-        # Return PDF as download response
+
         response = HttpResponse(pdf_content, content_type='application/pdf')
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
         response['Content-Length'] = len(pdf_content)
@@ -2078,7 +2281,7 @@ def create_ordre_mission(request):
     )
     
     return Response({
-        'message': 'Ordre de mission créé avec succès',
+        'message': msg(request, 'mission_created'),
         'mission_id': ordre_mission.id,
         'numero': ordre_mission.numero
     }, status=status.HTTP_201_CREATED)
@@ -2125,35 +2328,45 @@ def dashboard_stats(request):
     total_depenses = Project.objects.aggregate(
         total=Sum('total_depenses')
     )['total'] or 0
-    
-    total_recus = Project.objects.aggregate(
-        total=Sum('total_recus')
+
+    total_accreance = Project.objects.aggregate(
+        total=Sum('total_accreance')
     )['total'] or 0
-    
+
     total_benefices = Project.objects.aggregate(
         total=Sum('total_benefices')
     )['total'] or 0
-    
+
+    recent_ops_qs = CaisseOperation.objects.select_related('project').order_by('-created_at')[:5]
+    recent_ops = [
+        {
+            'id': op.id,
+            'operation_type': op.operation_type,
+            'amount': float(op.amount),
+            'created_at': op.created_at,
+            'project_name': op.project.name if op.project else None,
+        }
+        for op in recent_ops_qs
+    ]
+
     return Response({
-        'caisse_balance': caisse.total_amount,
+        'caisse_balance': float(caisse.total_amount),
         'total_projects': total_projects,
         'active_dettes': active_dettes,
         'completed_dettes': completed_dettes,
-        'total_encaissements': total_encaissements,
-        'total_decaissements': total_decaissements,
-        'total_depenses': total_depenses,
-        'total_recus': total_recus,
-        'total_benefices': total_benefices,
-        'recent_operations': CaisseOperation.objects.all()[:5].values(
-            'operation_type', 'amount', 'created_at', 'project__name'
-        )
+        'total_encaissements': float(total_encaissements),
+        'total_decaissements': float(total_decaissements),
+        'total_depenses': float(total_depenses),
+        'total_accreance': float(total_accreance),
+        'total_benefices': float(total_benefices),
+        'recent_operations': recent_ops,
     })
 
 @api_view(['PUT'])
 @permission_classes([IsAuthenticated])
-def update_ordre_mission(request, pk):
+def update_ordre_mission(request, mission_id):
     try:
-        ordre_mission = OrdreDeMission.objects.get(pk=pk)
+        ordre_mission = OrdreDeMission.objects.get(pk=mission_id)
         data = request.data
         
         # Helper function to handle date fields
@@ -2177,7 +2390,7 @@ def update_ordre_mission(request, pk):
         ordre_mission.save()
         
         return Response({
-            'message': 'Ordre de mission mis à jour avec succès',
+            'message': msg(request, 'mission_updated'),
             'mission_id': ordre_mission.id,
             'numero': ordre_mission.numero
         })
@@ -2195,12 +2408,12 @@ def delete_ordre_mission(request, mission_id):
         ordre_mission.delete()
         
         return Response({
-            'message': f'Ordre de mission {numero} supprimé avec succès'
+            'message': msg(request, 'mission_deleted') + (f' (N° {numero})' if numero else '')
         }, status=status.HTTP_200_OK)
         
     except OrdreDeMission.DoesNotExist:
         return Response({
-            'error': 'Ordre de mission non trouvé'
+            'error': msg(request, 'not_found')
         }, status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
         return Response({
@@ -2236,59 +2449,26 @@ def get_ordre_mission(request, mission_id):
         
     except OrdreDeMission.DoesNotExist:
         return Response({
-            'error': 'Ordre de mission non trouvé'
+            'error': msg(request, 'not_found')
         }, status=status.HTTP_404_NOT_FOUND)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def download_ordre_mission_pdf_weasy(request, mission_id):
     try:
-        from weasyprint import HTML, CSS
-        from django.template.loader import render_to_string
-        
         ordre_mission = get_object_or_404(OrdreDeMission, id=mission_id)
-        
-        # Prepare context data
-        context = {
-            'ordre': ordre_mission,
-            'date_today': datetime.now().strftime('%d/%m/%Y'),
-            'date_depart_formatted': ordre_mission.date_depart.strftime('%d/%m/%Y'),
-            'date_retour_formatted': ordre_mission.get_date_retour_display(),
-            'matrcule_2': ordre_mission.matricule_2 or '',
-            'motif_display': ordre_mission.motif,
-            'qr_code_data': ordre_mission.generate_qr_code()
-        }
-        
-        # Render HTML
-        html_string = render_to_string('Missions/ordre_de_mission.html', context)
-        
-        # Generate PDF with WeasyPrint
-        html = HTML(string=html_string)
-        pdf = html.write_pdf()
-        
-        # Create response
+        pdf = generate_ordre_mission_pdf(ordre_mission)
+        safe_numero = ordre_mission.numero.replace('/', '_')
         response = HttpResponse(pdf, content_type='application/pdf')
-        response['Content-Disposition'] = f'attachment; filename="ordre_mission_{ordre_mission.numero.replace("/", "_")}.pdf"'
-        
+        response['Content-Disposition'] = f'attachment; filename="ordre_mission_{safe_numero}.pdf"'
         return response
-        
-    except ImportError:
-        return HttpResponse("WeasyPrint non installé. Utilisez: pip install weasyprint", 
-                          status=500)
     except OrdreDeMission.DoesNotExist:
         raise Http404("Ordre de mission non trouvé")
+    except RuntimeError as exc:
+        return HttpResponse(f"Erreur LaTeX: {str(exc)}", status=500)
     except Exception as e:
-        return HttpResponse(f"Erreur lors de la génération du PDF: {str(e)}", 
-                          status=500)
+        return HttpResponse(f"Erreur lors de la génération du PDF: {str(e)}", status=500)
     
-from decimal import Decimal
-from django.shortcuts import get_object_or_404
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
-from rest_framework import status
-from datetime import datetime
-
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def create_revenu(request):
@@ -2311,7 +2491,7 @@ def create_revenu(request):
         if Revenu.objects.filter(revenu_code=revenu_code).exists():
             return Response({
                 'success': False,
-                'error': f'Revenu code "{revenu_code}" already exists'
+                'error': msg(request, 'revenu_code_exists')
             }, status=status.HTTP_400_BAD_REQUEST)
         
         # Get project
@@ -2372,7 +2552,7 @@ def create_revenu(request):
         
         return Response({
             'success': True,
-            'message': 'Revenu created successfully',
+            'message': msg(request, 'revenu_created'),
             'revenu': {
                 'id': revenu.id,
                 'revenu_code': revenu.revenu_code,
@@ -2516,7 +2696,7 @@ def delete_revenu(request, revenu_id):
         
         return Response({
             'success': True,
-            'message': 'Revenu deleted successfully',
+            'message': msg(request, 'revenu_deleted'),
             'deleted_revenu': revenu_data,
             'project_budget_restored': str(project.estimated_budget)
         }, status=status.HTTP_200_OK)
@@ -2753,19 +2933,39 @@ def generate_project_finance_pdf(request):
             'qr_code_base64': qr_base64,
         }
         
-        # Render HTML
-        html_content = render_to_string('projects/project_history.html', context)
-        
-        # Generate PDF
-        pdf_file = HTML(string=html_content).write_pdf()
-        
-        # Create response
+        # Build a simplified context list for the LaTeX generator
+        history_with_context = []
+        for entry in history_entries:
+            fe = FinanceEntryProxy()
+            fe.numero = entry['numero']
+            fe.date = entry['date']
+            fe.action = entry['type']
+            fe.amount = entry['amount']
+            fe.balance_after = entry['balance_after'] or Decimal('0')
+            fe.description = entry['description']
+            history_with_context.append({'entry': fe, 'is_collaborator': entry['is_collaborator'], 'is_dette': entry['is_dette']})
+
+        pdf_context = {
+            'report_title': report_title,
+            'period_display': period_display,
+            'generated_by': request.user,
+            'total_encaissements': total_encaissements if by_collaborator else total_accreance,
+            'total_decaissements': total_decaissements if by_collaborator else total_depenses,
+            'solde_net': solde_net,
+            'total_operations': len(history_entries),
+            'qr_code_base64': generate_qr_png_b64(qr_data),
+        }
+
+        try:
+            pdf_file = generate_caisse_history_pdf_latex(history_with_context, pdf_context)
+        except RuntimeError as exc:
+            return Response({'error': str(exc)}, status=500)
+
         response = HttpResponse(pdf_file, content_type='application/pdf')
         filename = f"{report_title.replace(' ', '_')}_{timezone.now().strftime('%Y%m%d_%H%M%S')}.pdf"
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
-        
         return response
-        
+
     except Exception as e:
         return Response({'error': str(e)}, status=500)
 
@@ -2810,16 +3010,15 @@ def generate_dette_journal_pdf(request, dette_id):
             'completion_percentage': (total_paid / dette.original_amount * 100) if dette.original_amount > 0 else 0,
         }
 
-        html_string = render_to_string('dettes/dette_journal.html', context)
+        try:
+            pdf_bytes = generate_dette_journal_pdf_latex(dette, payments)
+        except RuntimeError as exc:
+            return Response({'detail': str(exc)}, status=500)
 
-        response = HttpResponse(content_type='application/pdf')
-        response['Content-Disposition'] = f'attachment; filename="dette_journal_{dette.id}_{dette.creditor_name}_{timezone.now().strftime("%Y%m%d_%H%M%S")}.pdf"'
-
-        HTML(string=html_string, base_url=request.build_absolute_uri()).write_pdf(
-            response,
-            stylesheets=[CSS(string='@page { size: A4; margin: 1cm; }')]
-        )
-
+        safe_name = "".join(c for c in dette.creditor_name if c.isalnum() or c in ' _-').strip().replace(' ', '_')
+        filename = f"dette_journal_{dette.id}_{safe_name}_{timezone.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        response = HttpResponse(pdf_bytes, content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
         return response
 
     except Dette.DoesNotExist:
