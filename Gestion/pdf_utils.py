@@ -6,6 +6,7 @@ Install: pip install reportlab
 """
 
 import io
+import os
 import base64
 from decimal import Decimal
 from datetime import datetime
@@ -24,7 +25,138 @@ from reportlab.platypus import (
 )
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
+from django.conf import settings
 from django.utils import timezone
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Logo paths (project root)
+# ─────────────────────────────────────────────────────────────────────────────
+_LOGO_DIR = getattr(settings, 'BASE_DIR', os.path.dirname(os.path.dirname(__file__)))
+LOGO_SARL = os.path.join(_LOGO_DIR, 'SARL.png')
+LOGO_SCK  = os.path.join(_LOGO_DIR, 'SCK.png')
+LOGO_ISO  = os.path.join(_LOGO_DIR, 'ISO.png')
+
+
+def _safe_image(path, width=None, height=None):
+    """
+    Return a ReportLab Image if the path exists; otherwise an empty Spacer.
+
+    If only one of (width, height) is provided, the missing dimension is
+    derived from the image's native aspect ratio using PIL. This avoids
+    ReportLab's default behavior of using the raw pixel size as a point
+    measurement, which produces wildly stretched/squashed logos.
+    """
+    try:
+        if os.path.exists(path):
+            # If width and height are not both supplied, read natural size
+            # from the PNG and compute the missing dimension to preserve
+            # aspect ratio.
+            if width is None or height is None:
+                try:
+                    with PILImage.open(path) as im:
+                        nat_w, nat_h = im.size
+                    if width is None and height is None:
+                        # Default: cap at 1.5 cm height
+                        height = 1.5 * cm
+                        width = height * (nat_w / nat_h)
+                    elif width is None:
+                        width = height * (nat_w / nat_h)
+                    elif height is None:
+                        height = width * (nat_h / nat_w)
+                except Exception:
+                    # Fallback to safe square if PIL fails for any reason
+                    width = width or (height or 1.5 * cm)
+                    height = height or width
+            return Image(path, width=width, height=height)
+    except Exception:
+        pass
+    return Spacer(width or 1, height or 1)
+
+
+def _logo_dims(path, height):
+    """
+    Return (width, height) for the given logo file scaled to the requested
+    height while preserving its native aspect ratio. Falls back to (height,
+    height) — i.e. a square — if PIL cannot read the file.
+    """
+    try:
+        with PILImage.open(path) as im:
+            nat_w, nat_h = im.size
+        return height * (nat_w / nat_h), height
+    except Exception:
+        return height, height
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Amount → French words ("cinquante mille Dinars Algériens")
+# ─────────────────────────────────────────────────────────────────────────────
+
+_UNITS = ['', 'un', 'deux', 'trois', 'quatre', 'cinq', 'six', 'sept', 'huit',
+          'neuf', 'dix', 'onze', 'douze', 'treize', 'quatorze', 'quinze',
+          'seize', 'dix-sept', 'dix-huit', 'dix-neuf']
+_TENS  = ['', '', 'vingt', 'trente', 'quarante', 'cinquante', 'soixante',
+          'soixante', 'quatre-vingt', 'quatre-vingt']
+
+
+def _num_below_100(n):
+    if n < 20:
+        return _UNITS[n]
+    t, u = divmod(n, 10)
+    if t in (7, 9):
+        base = _TENS[t]
+        u += 10
+        return base + ('-' if u != 11 or t != 7 else ' et ') + _UNITS[u]
+    if u == 0:
+        return _TENS[t] + ('s' if t == 8 else '')
+    if u == 1 and t in (2, 3, 4, 5, 6):
+        return _TENS[t] + ' et un'
+    return _TENS[t] + '-' + _UNITS[u]
+
+
+def _num_below_1000(n):
+    if n < 100:
+        return _num_below_100(n)
+    h, r = divmod(n, 100)
+    if h == 1:
+        return 'cent' + ((' ' + _num_below_100(r)) if r else '')
+    suffix = '' if r else 's'
+    return _UNITS[h] + ' cent' + suffix + ((' ' + _num_below_100(r)) if r else '')
+
+
+def num_to_french_words(amount):
+    """Convert a number to French words (integer part only)."""
+    try:
+        n = int(Decimal(str(amount)))
+    except Exception:
+        return ''
+    if n == 0:
+        return 'zéro'
+    if n < 0:
+        return 'moins ' + num_to_french_words(-n)
+
+    parts = []
+    billion, n  = divmod(n, 1_000_000_000)
+    million, n  = divmod(n, 1_000_000)
+    thousand, r = divmod(n, 1_000)
+
+    if billion:
+        parts.append((_num_below_1000(billion) + ' milliard' + ('s' if billion > 1 else '')))
+    if million:
+        parts.append((_num_below_1000(million) + ' million' + ('s' if million > 1 else '')))
+    if thousand:
+        if thousand == 1:
+            parts.append('mille')
+        else:
+            w = _num_below_1000(thousand)
+            # "mille" never takes 's'
+            if w.endswith('cents'):
+                w = w[:-1]
+            parts.append(w + ' mille')
+    if r:
+        parts.append(_num_below_1000(r))
+
+    return ' '.join(parts).strip()
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Colour palette
@@ -138,31 +270,129 @@ def _totals_row_style(table_style, row_index):
 # Company header (reusable)
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _company_header(subtitle: str = '') -> list:
-    """Return a list of flowables for the ECH SAHARA page header."""
-    # Navy banner
-    banner_data = [[Paragraph('EURL E.C.H SAHRA', STYLES['h1'])]]
-    if subtitle:
-        banner_data.append(
-            [Paragraph(subtitle, _style('sub_white', fontSize=10, textColor=ORANGE,
-                                        alignment=TA_CENTER))]
-        )
-    banner = Table(banner_data, colWidths=[18 * cm])
-    banner.setStyle(TableStyle([
-        ('BACKGROUND',   (0, 0), (-1, -1), NAVY),
-        ('ALIGN',        (0, 0), (-1, -1), 'CENTER'),
-        ('TOPPADDING',   (0, 0), (-1, -1), 10),
-        ('BOTTOMPADDING',(0, 0), (-1, -1), 10),
-        ('LEFTPADDING',  (0, 0), (-1, -1), 12),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 12),
-        ('ROUNDEDCORNERS', [4]),
-    ]))
-    tagline = Paragraph(
-        "Entreprise de Travaux de Construction Hydraulique et Génie Civil",
-        _style('tagline', fontSize=8, textColor=TEXT_GRAY, alignment=TA_CENTER)
+def _company_header(subtitle: str = '', city_date: str = None) -> list:
+    """
+    Letterhead matching DEPENSES.docx:
+      ┌──────────────────────────────────────────────────────────┐
+      │   [SARL.png]                              [SCK]  [ISO]   │
+      │                                                          │
+      │                         Ouargla le DD/MM/YYYY            │
+      │                                                          │
+      │  ─────────────────────────────────────────────────────   │
+      │                       SUBTITLE (optional)                │
+      └──────────────────────────────────────────────────────────┘
+    """
+    # Target heights — SARL slightly taller than the badges so the row
+    # reads as a logo + two certifications cluster.
+    SARL_H = 1.6 * cm
+    BADGE_H = 1.3 * cm
+
+    # Compute aspect-correct widths from the source PNGs
+    sarl_w, sarl_h = _logo_dims(LOGO_SARL, SARL_H)
+    sck_w,  sck_h  = _logo_dims(LOGO_SCK,  BADGE_H)
+    iso_w,  iso_h  = _logo_dims(LOGO_ISO,  BADGE_H)
+
+    sarl = _safe_image(LOGO_SARL, width=sarl_w, height=sarl_h)
+    sck  = _safe_image(LOGO_SCK,  width=sck_w,  height=sck_h)
+    iso  = _safe_image(LOGO_ISO,  width=iso_w,  height=iso_h)
+
+    # Right cluster: SCK + ISO side by side, each column sized to its logo
+    # plus a tiny gutter so the two badges sit cleanly next to each other.
+    GUTTER = 3  # points
+    right_cluster = Table(
+        [[sck, iso]],
+        colWidths=[sck_w + GUTTER, iso_w + GUTTER],
     )
-    return [banner, Spacer(1, 3 * mm), tagline, Spacer(1, 4 * mm),
-            HRFlowable(width='100%', thickness=1, color=BORDER), Spacer(1, 4 * mm)]
+    right_cluster.setStyle(TableStyle([
+        ('ALIGN',  (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LEFTPADDING',  (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING',   (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING',(0, 0), (-1, -1), 0),
+    ]))
+
+    right_cluster_w = sck_w + iso_w + 2 * GUTTER
+
+    # 3-column header row.
+    #  - Left  column: just wide enough for the SARL logo (plus a small pad).
+    #  - Right column: just wide enough for the SCK + ISO cluster.
+    #  - Middle column: stretches to fill the remaining usable width (~18cm).
+    PAGE_CONTENT_W = 18 * cm
+    left_col_w = sarl_w + 4
+    right_col_w = right_cluster_w + 4
+    mid_col_w = max(1 * cm, PAGE_CONTENT_W - left_col_w - right_col_w)
+
+    head = Table(
+        [[sarl, '', right_cluster]],
+        colWidths=[left_col_w, mid_col_w, right_col_w],
+        rowHeights=[SARL_H + 4],
+    )
+    head.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('ALIGN',  (0, 0), (0, 0), 'LEFT'),
+        ('ALIGN',  (2, 0), (2, 0), 'RIGHT'),
+        ('LEFTPADDING',  (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING',   (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING',(0, 0), (-1, -1), 0),
+    ]))
+
+    out = [head, Spacer(1, 2 * mm)]
+
+    # City + date line (right-aligned)
+    if city_date is None:
+        city_date = "Ouargla le " + timezone.now().strftime('%d / %m / %Y')
+    out.append(Paragraph(city_date,
+                         _style('city_date', fontSize=10, alignment=TA_RIGHT,
+                                textColor=BLACK, leading=13)))
+
+    # Subtitle banner (slimmer)
+    if subtitle:
+        sub = Table([[Paragraph(subtitle,
+                                _style('sub_title', fontName='Helvetica-Bold',
+                                       fontSize=12, textColor=WHITE,
+                                       alignment=TA_CENTER, leading=14))]],
+                    colWidths=[18 * cm])
+        sub.setStyle(TableStyle([
+            ('BACKGROUND',   (0, 0), (-1, -1), NAVY),
+            ('TOPPADDING',   (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING',(0, 0), (-1, -1), 4),
+        ]))
+        out += [Spacer(1, 3 * mm), sub]
+
+    out += [Spacer(1, 3 * mm),
+            HRFlowable(width='100%', thickness=1, color=NAVY),
+            Spacer(1, 5 * mm)]
+    return out
+
+
+def _qr_footer(data: str, label: str = '') -> list:
+    """Single small QR code centered at the bottom of the document."""
+    try:
+        buf = generate_qr_png(data)
+        qr = Image(buf, width=2.2 * cm, height=2.2 * cm)
+    except Exception:
+        return []
+    centered = Table([[qr]], colWidths=[2.2 * cm])
+    centered.setStyle(TableStyle([
+        ('ALIGN',  (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LEFTPADDING',  (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING',   (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING',(0, 0), (-1, -1), 0),
+    ]))
+    wrap = Table([[centered]], colWidths=[18 * cm])
+    wrap.setStyle(TableStyle([
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN',(0, 0), (-1, -1), 'MIDDLE'),
+        ('LEFTPADDING',  (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING',   (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING',(0, 0), (-1, -1), 0),
+    ]))
+    return [Spacer(1, 8 * mm), wrap]
 
 
 def _build_pdf(flowables: list, pagesize=A4,
@@ -323,6 +553,12 @@ def generate_bl_pdf(bon) -> bytes:
     ]))
     flowables.append(sig_table)
 
+    # QR code at the end
+    flowables += _qr_footer(
+        f"BL: {bon.bl_number}\nProjet: {bon.project.name}\n"
+        f"Total: {fmt_amount(bon.total_amount)}\nDate: {fmt_date(bon.created_at)}"
+    )
+
     return _build_pdf(flowables)
 
 
@@ -383,6 +619,12 @@ def generate_bc_pdf(bon) -> bytes:
         ('LINEABOVE', (0, 1), (-1, 1), 0.5, BLACK),
     ]))
     flowables.append(sig_table)
+
+    # QR code at the end
+    flowables += _qr_footer(
+        f"BC: {bon.bc_number}\nDoit: {bon.doit or '—'}\n"
+        f"Total HT: {fmt_amount(bon.total_ht)}\nDate: {bon.date_commande}"
+    )
     return _build_pdf(flowables)
 
 
@@ -455,6 +697,12 @@ def generate_ordre_mission_pdf(mission) -> bytes:
         ('LINEABOVE', (0, 1), (-1, 1), 0.5, BLACK),
     ]))
     flowables.append(sig_table)
+
+    # QR code at the end
+    flowables += _qr_footer(
+        f"Mission: {mission.numero}\nAgent: {mission.nom_prenom}\n"
+        f"Destination: {mission.destination}\nDépart: {mission.date_depart}"
+    )
     return _build_pdf(flowables)
 
 
@@ -547,6 +795,13 @@ def generate_caisse_history_pdf(history_with_context, context_data: dict) -> byt
                       colWidths=[2 * cm, 2.5 * cm, 3 * cm, 3 * cm, 3 * cm, None])
     ops_table.setStyle(TABLE_HEADER_STYLE)
     flowables.append(ops_table)
+
+    # QR code at the end
+    flowables += _qr_footer(
+        f"{report_title}\nPériode: {period}\n"
+        f"Encaissements: {fmt_amount(total_enc)}\nDécaissements: {fmt_amount(total_dec)}\n"
+        f"Solde net: {fmt_amount(solde_net)}"
+    )
     return _build_pdf(flowables)
 
 
@@ -555,58 +810,157 @@ def generate_caisse_history_pdf(history_with_context, context_data: dict) -> byt
 # ─────────────────────────────────────────────────────────────────────────────
 
 def generate_operation_pdf(history_entry, generated_by=None) -> bytes:
-    qr_data = f"ECH-OP-{history_entry.numero}-{history_entry.date}"
-    qr_img = Image(generate_qr_png(qr_data), width=3 * cm, height=3 * cm)
+    """
+    'Bon de Dépense' / 'Bon d'Encaissement' slip matching DEPENSES.docx layout.
 
-    flowables = _company_header("DÉTAIL D'OPÉRATION")
-
-    action_color = '#16A34A' if history_entry.action == 'encaissement' else '#DC2626'
-    info_rows = [
-        ("N°",           history_entry.numero),
-        ("Date",         fmt_date(history_entry.date)),
-        ("Type",         f'<font color="{action_color}"><b>{history_entry.action.capitalize()}</b></font>'),
-        ("Montant",      fmt_amount(history_entry.amount)),
-        ("Solde avant",  fmt_amount(history_entry.balance_before)),
-        ("Solde après",  fmt_amount(history_entry.balance_after)),
-        ("Effectué par", history_entry.user.get_full_name() if history_entry.user else '—'),
-        ("Projet",       history_entry.project.name if history_entry.project else '—'),
-        ("Description",  history_entry.description or '—'),
-    ]
-    info = Table(
-        [[Paragraph(f'<b>{k} :</b>', STYLES['td']),
-          Paragraph(str(v), STYLES['td'])]
-         for k, v in info_rows],
-        colWidths=[4 * cm, 9 * cm]
-    )
-    info.setStyle(TableStyle([
-        ('ROWBACKGROUNDS', (0, 0), (-1, -1), [WHITE, ROW_GRAY]),
-        ('GRID',           (0, 0), (-1, -1), 0.3, BORDER),
-        ('TOPPADDING',     (0, 0), (-1, -1), 5),
-        ('BOTTOMPADDING',  (0, 0), (-1, -1), 5),
-        ('LEFTPADDING',    (0, 0), (-1, -1), 6),
-    ]))
-
-    row = Table([[info, qr_img]], colWidths=[14 * cm, 4 * cm])
-    row.setStyle(TableStyle([('VALIGN', (0, 0), (-1, -1), 'TOP'),
-                              ('LEFTPADDING', (0, 0), (-1, -1), 0)]))
-    flowables.append(row)
-
+    Layout:
+      • Header: [SARL.png left]   [SCK + ISO right]
+      • "Ouargla le DD / MM / YYYY"  (right-aligned)
+      • Banner: "DEPENSE N° XX/YYYY" or "ENCAISSEMENT N° XX/YYYY"
+      • Body (left-aligned, line-by-line):
+          Bénéficiaire : NAME
+          Fonction     : ROLE
+          Somme        : 50 000.00 DA
+          En lettre    : cinquante mille Dinars Algériens
+          Date         : 05/05/2026
+          Motif        : ...
+          [Projet     : XXX]
+      • Signatures: "Donneur." (left) / "Le Bénéficiaire :" (right)
+      • Footer: QR code with operation reference
+    """
     op = history_entry.operation
+    is_enc = history_entry.action == 'encaissement'
+
+    # Extract the document number "100/2026" from the ECH numero if possible
+    year = (history_entry.date.year if history_entry.date else timezone.now().year)
+    doc_num = history_entry.numero or ''
+    if doc_num.upper().startswith('ECH'):
+        try:
+            doc_num = f"{int(doc_num[3:])}/{year}"
+        except (ValueError, TypeError):
+            pass
+
+    title = ('ENCAISSEMENT' if is_enc else 'DÉPENSE') + f' N° {doc_num}'
+    city_date = "Ouargla le " + (
+        history_entry.date.strftime('%d / %m / %Y') if history_entry.date
+        else timezone.now().strftime('%d / %m / %Y')
+    )
+
+    flowables = _company_header(subtitle=title, city_date=city_date)
+
+    # Beneficiary / function — derive from operation context
+    beneficiary = ''
+    fonction = ''
     if op:
-        flowables.append(Spacer(1, 5 * mm))
-        flowables.append(HRFlowable(width='100%', thickness=0.5, color=BORDER))
-        flowables.append(Spacer(1, 3 * mm))
-        flowables.append(Paragraph('<b>Informations de paiement</b>', STYLES['h2']))
-        pay_rows = [
-            ("Mode",       op.get_mode_paiement_display() if op.mode_paiement else '—'),
-            ("Fournisseur",op.nom_fournisseur or '—'),
-            ("Banque",     op.banque or '—'),
-            ("N° chèque",  op.numero_cheque or '—'),
-            ("Source",     op.get_income_source_display() if op.income_source else '—'),
-            ("Observation",op.observation or '—'),
-        ]
-        flowables.append(Spacer(1, 2 * mm))
-        flowables.append(_info_table(pay_rows))
+        if op.nom_fournisseur:
+            beneficiary = op.nom_fournisseur
+        elif op.dette and getattr(op.dette, 'creditor_name', None):
+            beneficiary = op.dette.creditor_name
+    if not beneficiary and history_entry.project and history_entry.project.collaborator_name:
+        beneficiary = history_entry.project.collaborator_name
+    if not beneficiary:
+        beneficiary = (history_entry.user.get_full_name()
+                       if history_entry.user else '—')
+
+    project_name = history_entry.project.name if history_entry.project else ''
+    if project_name and not fonction:
+        # Use project as fonction context when nothing else
+        fonction = 'Projet ' + project_name
+
+    # Amount formatting
+    amount_num = '{:,.2f}'.format(float(history_entry.amount or 0)).replace(',', ' ') + ' DA'
+    amount_words = num_to_french_words(history_entry.amount or 0) + ' Dinars Algériens'
+    amount_words = amount_words.capitalize()
+
+    date_str = (history_entry.date.strftime('%d/%m/%Y')
+                if history_entry.date else '—')
+
+    motif = (history_entry.description or
+             (op.description if op else '') or
+             ('Avance sur situation' if not is_enc else 'Encaissement'))
+
+    # Field rows — DEPENSES.docx style (key : value, generous spacing)
+    label_style = _style('dep_lbl', fontName='Helvetica-Bold', fontSize=12,
+                         textColor=BLACK, leading=22)
+    value_style = _style('dep_val', fontName='Helvetica', fontSize=12,
+                         textColor=BLACK, leading=22)
+    amount_style = _style('dep_amount', fontName='Helvetica-Bold', fontSize=13,
+                          textColor=NAVY, leading=22)
+    words_style = _style('dep_words', fontName='Helvetica-Oblique', fontSize=12,
+                         textColor=TEXT_GRAY, leading=20)
+
+    body_rows = [
+        [Paragraph('<b>Bénéficiaire :</b>', label_style),
+         Paragraph(beneficiary, value_style)],
+        [Paragraph('<b>Fonction :</b>', label_style),
+         Paragraph(fonction or '—', value_style)],
+        [Paragraph('<b>Somme :</b>', label_style),
+         Paragraph(amount_num, amount_style)],
+        [Paragraph('<b>En lettre :</b>', label_style),
+         Paragraph(amount_words, words_style)],
+        [Paragraph('<b>Date :</b>', label_style),
+         Paragraph(date_str, value_style)],
+        [Paragraph('<b>Motif :</b>', label_style),
+         Paragraph(motif, value_style)],
+    ]
+    if project_name:
+        body_rows.append([Paragraph('<b>Projet :</b>', label_style),
+                          Paragraph(project_name, value_style)])
+
+    if op and op.mode_paiement:
+        pay_str = op.get_mode_paiement_display()
+        if op.mode_paiement == 'cheque' and op.numero_cheque:
+            pay_str += f' (N° {op.numero_cheque}'
+            if op.banque: pay_str += f', {op.banque}'
+            pay_str += ')'
+        elif op.mode_paiement == 'virement' and op.banque:
+            pay_str += f' — {op.banque}'
+        body_rows.append([Paragraph('<b>Mode :</b>', label_style),
+                          Paragraph(pay_str, value_style)])
+
+    body_table = Table(body_rows, colWidths=[4.5 * cm, 12.5 * cm])
+    body_table.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('TOPPADDING',   (0, 0), (-1, -1), 8),
+        ('BOTTOMPADDING',(0, 0), (-1, -1), 8),
+        ('LEFTPADDING',  (0, 0), (-1, -1), 4),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+        ('LINEBELOW',    (0, 0), (-1, -2), 0.3, colors.HexColor('#E5E7EB')),
+    ]))
+    flowables.append(body_table)
+
+    # Signatures: "Donneur." (left), "Le Bénéficiaire :" (right)
+    flowables.append(Spacer(1, 2 * cm))
+    sig = Table(
+        [[Paragraph('<b>Donneur.</b>', _style('sig', fontSize=12, leading=16)),
+          '',
+          Paragraph('<b>Le Bénéficiaire :</b>', _style('sig2', fontSize=12, leading=16, alignment=TA_RIGHT))]],
+        colWidths=[7 * cm, 4 * cm, 7 * cm]
+    )
+    sig.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING',  (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+    ]))
+    flowables.append(sig)
+    flowables.append(Spacer(1, 2 * cm))
+
+    # QR code at the end
+    qr_data = (
+        f"EURL E.C.H SAHRA\n"
+        f"{title}\n"
+        f"Bénéficiaire: {beneficiary}\n"
+        f"Montant: {amount_num}\n"
+        f"Date: {date_str}"
+    )
+    qr_label = Paragraph(
+        f"<b>{title}</b><br/>"
+        f"<font size='9'>Bénéficiaire : {beneficiary}</font><br/>"
+        f"<font size='9' color='#1B3A6B'><b>{amount_num}</b></font><br/>"
+        f"<font size='8' color='#64748B'>Émis le {timezone.now().strftime('%d/%m/%Y à %H:%M')}</font>",
+        _style('qrl', fontSize=10, alignment=TA_RIGHT, leading=15)
+    )
+    flowables += _qr_footer(qr_data, label=None)
 
     return _build_pdf(flowables)
 
@@ -727,6 +1081,12 @@ def generate_dette_journal_pdf(dette, payments) -> bytes:
     pay_table = Table(pay_data, colWidths=[3 * cm, 4 * cm, 4 * cm, None])
     pay_table.setStyle(style)
     flowables.append(pay_table)
+
+    # QR code at the end
+    flowables += _qr_footer(
+        f"Dette: {dette.creditor_name}\nMontant: {fmt_amount(dette.original_amount)}\n"
+        f"Restant: {fmt_amount(dette.remaining_amount)}"
+    )
     return _build_pdf(flowables)
 
 
@@ -780,6 +1140,13 @@ def generate_project_finance_pdf(projects) -> bytes:
     table = Table(data, colWidths=[5 * cm, 3.5 * cm, 3.5 * cm, 3.5 * cm, 3 * cm])
     table.setStyle(style)
     flowables.append(table)
+
+    # QR code at the end
+    flowables += _qr_footer(
+        f"Bilan financier — {len(projects)} projets\n"
+        f"Budget total: {fmt_amount(total_budget)}\n"
+        f"Bénéfices: {fmt_amount(total_ben)}"
+    )
     return _build_pdf(flowables)
 
 
